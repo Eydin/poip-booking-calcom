@@ -1,7 +1,10 @@
 "use client";
 
 import { BookerWebWrapper as Booker } from "@calcom/web/modules/bookings/components/BookerWebWrapper";
-import { getBookerWrapperClasses } from "@calcom/features/bookings/Booker/utils/getBookerWrapperClasses";
+import {
+  getBookerWrapperClasses,
+  getBookerBackgroundStyle,
+} from "@calcom/features/bookings/Booker/utils/getBookerWrapperClasses";
 
 import { type PageProps } from "@lib/d/[link]/[slug]/getServerSideProps";
 
@@ -23,7 +26,9 @@ export default function Type({
 }: PageProps) {
   return (
     <BookingPageErrorBoundary>
-      <main className={getBookerWrapperClasses({ isEmbed: !!isEmbed })}>
+      <main
+        className={getBookerWrapperClasses({ isEmbed: !!isEmbed })}
+        style={getBookerBackgroundStyle({ isEmbed: !!isEmbed })}>
         <Booker
           eventData={eventData}
           username={user}

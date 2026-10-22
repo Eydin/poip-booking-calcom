@@ -4,7 +4,10 @@ import type { EmbedProps } from "app/WithEmbedSSR";
 import { useSearchParams } from "next/navigation";
 
 import { BookerWebWrapper as Booker } from "@calcom/web/modules/bookings/components/BookerWebWrapper";
-import { getBookerWrapperClasses } from "@calcom/features/bookings/Booker/utils/getBookerWrapperClasses";
+import {
+  getBookerWrapperClasses,
+  getBookerBackgroundStyle,
+} from "@calcom/features/bookings/Booker/utils/getBookerWrapperClasses";
 
 import type { inferSSRProps } from "@lib/types/inferSSRProps";
 
@@ -29,7 +32,9 @@ function Type({ slug, user, isEmbed, booking, isBrandingHidden, eventData, orgBa
 
   return (
     <BookingPageErrorBoundary>
-      <main className={getBookerWrapperClasses({ isEmbed: !!isEmbed })}>
+      <main
+        className={getBookerWrapperClasses({ isEmbed: !!isEmbed })}
+        style={getBookerBackgroundStyle({ isEmbed: !!isEmbed })}>
         <Booker
           username={user}
           eventSlug={slug}
