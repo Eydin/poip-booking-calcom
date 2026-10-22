@@ -824,6 +824,10 @@ async function handler(
   let luckyUserResponse;
   let isFirstSeat = true;
   let availableUsers: IsFixedAwareUser[] = [];
+  // Round-robin hosts who were NOT picked for this booking. POIP wants every round-robin
+  // booking on both Radu's and Diana's calendars regardless of who was assigned, so these
+  // get added as calendar-only team members further down (see computeTeamData call below).
+  let otherRoundRobinHosts: IsFixedAwareUser[] = [];
 
   if (eventType.seatsPerTimeSlot) {
     const booking = await deps.prismaClient.booking.findFirst({
@@ -1118,6 +1122,12 @@ async function handler(
 
       // Pushing fixed user before the luckyUser guarantees the (first) fixed user as the organizer.
       users = [...fixedUserPool, ...luckyUsers];
+      {
+        const selectedUserIds = new Set(users.map((u) => u.id));
+        otherRoundRobinHosts = eventTypeWithUsers.users.filter(
+          (user: IsFixedAwareUser) => !user.isFixed && !selectedUserIds.has(user.id)
+        );
+      }
       luckyUserResponse = { luckyUsers: luckyUsers.map((u) => u.id) };
       troubleshooterData = {
         ...troubleshooterData,
@@ -1355,6 +1365,31 @@ async function handler(
     users,
     organizerEmail: organizerUser.email,
   });
+
+  // Cal.com's round robin only puts the booking on the winning host's calendar. Add the
+  // other round-robin host(s) as calendar-only team members so the booking shows on their
+  // calendar too (via the Google Calendar attendee invite) without affecting who was
+  // assigned or anyone's availability.
+  if (eventType.schedulingType === SchedulingType.ROUND_ROBIN && otherRoundRobinHosts.length) {
+    const existingMemberIds = new Set(teamMembers.map((member) => member.id));
+    const extraTeamMembers = await Promise.all(
+      otherRoundRobinHosts
+        .filter((user) => user.email !== organizerUser.email && !existingMemberIds.has(user.id))
+        .map(async (user) => ({
+          id: user.id,
+          email: user.email ?? "",
+          name: user.name ?? "",
+          firstName: "",
+          lastName: "",
+          timeZone: user.timeZone,
+          language: {
+            translate: await getTranslation(user.locale ?? "en", "common"),
+            locale: user.locale ?? "en",
+          },
+        }))
+    );
+    teamMembers.push(...extraTeamMembers);
+  }
 
   const teamInfo = eventType.team;
 
