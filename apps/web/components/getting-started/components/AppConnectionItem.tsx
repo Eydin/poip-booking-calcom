@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import posthog from "posthog-js";
 
@@ -28,6 +29,7 @@ interface IAppConnectionItem {
 const AppConnectionItem = (props: IAppConnectionItem) => {
   const { title, logo, type, installed, isDefault, defaultInstall, slug } = props;
   const { t } = useLocale();
+  const pathname = usePathname();
   const utils = trpc.useUtils();
   const setDefaultConferencingApp = trpc.viewer.apps.setDefaultConferencingApp.useMutation({
     onSuccess: async () => {
@@ -54,6 +56,10 @@ const AppConnectionItem = (props: IAppConnectionItem) => {
         <InstallAppButtonWithoutPlanCheck
           type={type}
           options={{
+            // Without this, Google's OAuth callback drops the user onto /apps/installed/*
+            // instead of back into the onboarding wizard, which then bounces them back to
+            // step 1 since onboarding isn't marked complete yet.
+            returnTo: `${WEBAPP_URL}${pathname}`,
             onSuccess: () => {
               if (defaultInstall && slug) {
                 setDefaultConferencingApp.mutate({ slug });
