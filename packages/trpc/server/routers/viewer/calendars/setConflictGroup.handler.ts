@@ -25,13 +25,16 @@ export const setConflictGroupHandler = async ({ ctx, input }: SetConflictGroupOp
   const { user } = ctx;
   const { integration, externalId, credentialId, conflictGroupId } = input;
 
-  await SelectedCalendarRepository.updateUserLevel({
-    where: {
-      userId: user.id,
-      integration,
-      externalId,
-      credentialId,
-    },
-    data: { conflictGroupId },
+  // Upsert rather than update: the group tag can be set right after flipping the
+  // conflict-checking toggle on, before that toggle's own request has finished creating the
+  // SelectedCalendar row. Upserting avoids a "SelectedCalendar not found" race in that case,
+  // and converges to the same row either way once both requests have completed.
+  await SelectedCalendarRepository.upsert({
+    userId: user.id,
+    integration,
+    externalId,
+    credentialId,
+    eventTypeId: null,
+    conflictGroupId,
   });
 };

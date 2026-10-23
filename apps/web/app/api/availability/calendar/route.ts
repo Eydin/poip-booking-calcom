@@ -93,14 +93,22 @@ async function deleteHandler(req: NextRequest) {
 
   const { integration, externalId, eventTypeId } = selectedCalendarSelectSchema.parse(searchParams);
 
-  await SelectedCalendarRepository.delete({
-    where: {
-      userId: user.id,
-      externalId,
-      integration,
-      eventTypeId: eventTypeId ?? null,
-    },
-  });
+  try {
+    await SelectedCalendarRepository.delete({
+      where: {
+        userId: user.id,
+        externalId,
+        integration,
+        eventTypeId: eventTypeId ?? null,
+      },
+    });
+  } catch (error) {
+    // DELETE is idempotent: if it's already gone (e.g. a duplicate request from a fast
+    // double-toggle), the desired end state - not selected - is already true, so don't 500.
+    if (!(error instanceof Error) || error.message !== "SelectedCalendar not found") {
+      throw error;
+    }
+  }
 
   return NextResponse.json({ message: "Calendar Selection Saved" });
 }
