@@ -244,7 +244,7 @@ function getSelectedCalendars({
   eventTypeId: number | null;
 }): Pick<
   SelectedCalendar,
-  "externalId" | "integration" | "eventTypeId" | "updatedAt" | "googleChannelId" | "id"
+  "externalId" | "integration" | "eventTypeId" | "updatedAt" | "googleChannelId" | "id" | "conflictGroupId"
 >[] {
   if (eventTypeId) {
     return user.allSelectedCalendars.filter((calendar) => calendar.eventTypeId === eventTypeId);
@@ -255,11 +255,11 @@ function getSelectedCalendars({
 export type UserWithCalendars = Pick<User, "id" | "email"> & {
   allSelectedCalendars: Pick<
     SelectedCalendar,
-    "externalId" | "integration" | "eventTypeId" | "updatedAt" | "googleChannelId" | "id"
+    "externalId" | "integration" | "eventTypeId" | "updatedAt" | "googleChannelId" | "id" | "conflictGroupId"
   >[];
   userLevelSelectedCalendars: Pick<
     SelectedCalendar,
-    "externalId" | "integration" | "eventTypeId" | "updatedAt" | "googleChannelId" | "id"
+    "externalId" | "integration" | "eventTypeId" | "updatedAt" | "googleChannelId" | "id" | "conflictGroupId"
   >[];
   destinationCalendar: DestinationCalendar | null;
 };

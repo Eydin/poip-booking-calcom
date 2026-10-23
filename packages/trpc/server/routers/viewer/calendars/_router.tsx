@@ -1,6 +1,7 @@
 import authedProcedure from "../../../procedures/authedProcedure";
 import { router } from "../../../trpc";
 import { ZConnectedCalendarsInputSchema } from "./connectedCalendars.schema";
+import { ZSetConflictGroupInputSchema } from "./setConflictGroup.schema";
 import { ZSetDestinationCalendarInputSchema } from "./setDestinationCalendar.schema";
 import { ZSetDestinationReminderInputSchema } from "./setDestinationReminder.schema";
 
@@ -26,4 +27,10 @@ export const calendarsRouter = router({
 
       return setDestinationReminderHandler({ ctx, input });
     }),
+
+  setConflictGroup: authedProcedure.input(ZSetConflictGroupInputSchema).mutation(async ({ ctx, input }) => {
+    const { setConflictGroupHandler } = await import("./setConflictGroup.handler");
+
+    return setConflictGroupHandler({ ctx, input });
+  }),
 });

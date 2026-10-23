@@ -6,18 +6,28 @@ import { useState } from "react";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { trpc } from "@calcom/trpc/react";
 import classNames from "@calcom/ui/classNames";
-import { Switch } from "@calcom/ui/components/form";
+import { Input, Switch } from "@calcom/ui/components/form";
 import { ArrowLeftIcon, RotateCwIcon } from "@coss/ui/icons";
 import { showToast } from "@calcom/ui/components/toast";
 import type { ICalendarSwitchProps } from "@calcom/ui/components/calendar-switch";
 
-type UserCalendarSwitchProps = Omit<ICalendarSwitchProps, "eventTypeId">;
+type CalendarSwitchProps = ICalendarSwitchProps & {
+  /**
+   * AND-conflict-group this calendar currently belongs to, if any. Calendars sharing the same
+   * group tag are only treated as busy when ALL of them are busy at once (useful for checking
+   * two people's calendars at once on a shared booking page), instead of the default behaviour
+   * of blocking a slot when ANY selected calendar is busy.
+   */
+  conflictGroupId?: string | null;
+};
 
-type EventCalendarSwitchProps = ICalendarSwitchProps & {
+type UserCalendarSwitchProps = Omit<CalendarSwitchProps, "eventTypeId">;
+
+type EventCalendarSwitchProps = CalendarSwitchProps & {
   eventTypeId: number;
 };
 
-const CalendarSwitch = (props: ICalendarSwitchProps) => {
+const CalendarSwitch = (props: CalendarSwitchProps) => {
   const {
     title,
     externalId,
@@ -28,10 +38,21 @@ const CalendarSwitch = (props: ICalendarSwitchProps) => {
     delegationCredentialId,
     eventTypeId,
     disabled,
+    conflictGroupId,
   } = props;
   const [checkedInternal, setCheckedInternal] = useState(isChecked);
+  const [groupInput, setGroupInput] = useState(conflictGroupId ?? "");
   const utils = trpc.useUtils();
   const { t } = useLocale();
+  const setConflictGroupMutation = trpc.viewer.calendars.setConflictGroup.useMutation({
+    onSuccess: async () => {
+      await utils.viewer.calendars.connectedCalendars.invalidate();
+    },
+    onError: () => {
+      setGroupInput(conflictGroupId ?? "");
+      showToast(`Something went wrong when updating the conflict group for "${title}"`, "error");
+    },
+  });
   const mutation = useMutation({
     mutationFn: async ({ isOn }: { isOn: boolean }) => {
       const body = {
@@ -106,6 +127,30 @@ const CalendarSwitch = (props: ICalendarSwitchProps) => {
       )}
       {mutation.isPending && (
         <RotateCwIcon className="text-muted h-4 w-4 animate-spin ltr:ml-1 rtl:mr-1" />
+      )}
+      {checkedInternal && (
+        <div className="ml-4 flex items-center gap-1.5">
+          <Input
+            className="h-7 w-36 text-xs"
+            placeholder="AND-group (optional)"
+            disabled={disabled || setConflictGroupMutation.isPending}
+            value={groupInput}
+            onChange={(e) => setGroupInput(e.target.value)}
+            onBlur={() => {
+              const trimmed = groupInput.trim();
+              if (trimmed === (conflictGroupId ?? "")) return;
+              setConflictGroupMutation.mutate({
+                integration: type,
+                externalId,
+                credentialId,
+                conflictGroupId: trimmed || null,
+              });
+            }}
+          />
+          {setConflictGroupMutation.isPending && (
+            <RotateCwIcon className="text-muted h-4 w-4 animate-spin" />
+          )}
+        </div>
       )}
     </div>
   );

@@ -1031,6 +1031,13 @@ model SelectedCalendar {
 
   calendarCacheEvents CalendarCacheEvent[]
 
+  // When set, this calendar's conflict-checking is combined with every other selected
+  // calendar sharing the same conflictGroupId using AND semantics (busy only when ALL of
+  // them are busy at once), instead of the default OR semantics (busy when ANY selected
+  // calendar is busy). Lets one account check conflicts across several people's calendars
+  // (e.g. two practitioners sharing a booking page) without the full Team/Round-Robin feature.
+  conflictGroupId String?
+
   // It could still allow multiple user-level(eventTypeId is null) selected calendars for same userId, integration, externalId because NULL is not equal to NULL
   // We currently ensure uniqueness by checking for the existence of the record before creating a new one
   // Think about introducing a generated unique key ${userId}_${integration}_${externalId}_${eventTypeId}
@@ -1041,6 +1048,7 @@ model SelectedCalendar {
   @@index([eventTypeId])
   @@index([credentialId])
   @@index([channelId])
+  @@index([conflictGroupId])
   // Composite indices to optimize calendar-cache queries
   @@index([integration, googleChannelExpiration, error, watchAttempts, maxAttempts], name: "SelectedCalendar_watch_idx")
   @@index([integration, googleChannelExpiration, error, unwatchAttempts, maxAttempts], name: "SelectedCalendar_unwatch_idx")
