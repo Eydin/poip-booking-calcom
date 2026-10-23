@@ -407,7 +407,7 @@ export const getBusyCalendarTimes = async (
 
     // Each AND group needs its member calendars fetched individually (so attribution isn't
     // lost when a provider batches several calendars into one request), then intersected.
-    for (const calendarsInGroup of groups.values()) {
+    for (const calendarsInGroup of Array.from(groups.values())) {
       if (calendarsInGroup.length === 1) {
         results.push(...(await fetchBusyTimesFor(calendarsInGroup)));
         continue;
