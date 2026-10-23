@@ -89,6 +89,7 @@ const ConnectedCalendarList = ({
                           name={cal.name || "Nameless calendar"}
                           type={connectedCalendar.integration.type}
                           isChecked={cal.isSelected}
+                          conflictGroupId={cal.conflictGroupId}
                           destination={cal.externalId === destinationCalendarId}
                           credentialId={cal.credentialId}
                           eventTypeId={(() => {

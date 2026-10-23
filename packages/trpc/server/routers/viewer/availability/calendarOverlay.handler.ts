@@ -81,6 +81,9 @@ export const calendarOverlayHandler = async ({ ctx, input }: ListOptions) => {
       ...calendar,
       userId: user.id,
       integration: credential.type,
+      // Calendar overlay is a one-off preview of the user's own calendar, not a saved
+      // conflict-checking selection, so it never belongs to an AND-conflict-group.
+      conflictGroupId: null,
     };
   });
 

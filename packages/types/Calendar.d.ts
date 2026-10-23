@@ -333,5 +333,5 @@ export type CalendarClass = Class<Calendar, [CredentialForCalendarService]>;
 
 export type SelectedCalendar = Pick<
   _SelectedCalendar,
-  "userId" | "integration" | "externalId" | "credentialId"
+  "userId" | "integration" | "externalId" | "credentialId" | "conflictGroupId"
 >;

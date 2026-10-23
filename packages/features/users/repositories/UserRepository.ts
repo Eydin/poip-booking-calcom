@@ -1192,6 +1192,7 @@ export class UserRepository {
             integration: true,
             updatedAt: true,
             googleChannelId: true,
+            conflictGroupId: true,
           },
         },
         completedOnboarding: true,

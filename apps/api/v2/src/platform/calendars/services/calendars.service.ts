@@ -168,6 +168,9 @@ export class CalendarsService {
         ...calendar,
         userId,
         integration: credential.type,
+        // This is a one-off calendar-overlay style preview, not a saved conflict-checking
+        // selection, so it never belongs to an AND-conflict-group.
+        conflictGroupId: null,
       };
     });
     return composedSelectedCalendars;

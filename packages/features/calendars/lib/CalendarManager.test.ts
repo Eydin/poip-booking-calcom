@@ -1,11 +1,14 @@
 import { prisma } from "@calcom/prisma/__mocks__/prisma";
 import { getCalendar } from "@calcom/app-store/_utils/getCalendar";
-import type { CalendarEvent } from "@calcom/types/Calendar";
+import type { CalendarEvent, EventBusyDate, SelectedCalendar } from "@calcom/types/Calendar";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deduplicateCredentialsBasedOnSelectedCalendars,
   deleteEvent,
   getCalendarCredentials,
+  groupSelectedCalendarsByConflictGroup,
+  intersectBusyTimesAcrossCalendars,
+  mergeOverlappingBusyTimes,
   processEvent,
 } from "./CalendarManager";
 
@@ -266,6 +269,106 @@ describe("CalendarManager tests", () => {
       const calendarCredentials = getCalendarCredentials(credentials);
       expect(calendarCredentials).toHaveLength(1);
       expect(calendarCredentials[0].credential).toEqual(googleCalendarCredentials);
+    });
+  });
+
+  describe("fn: groupSelectedCalendarsByConflictGroup", () => {
+    function buildSelectedCalendar(overrides: Partial<SelectedCalendar> = {}): SelectedCalendar {
+      return {
+        externalId: "cal@example.com",
+        integration: "google_calendar",
+        conflictGroupId: null,
+        ...overrides,
+      } as SelectedCalendar;
+    }
+
+    it("puts calendars with no conflictGroupId into ungrouped", () => {
+      const calendars = [
+        buildSelectedCalendar({ externalId: "a@example.com" }),
+        buildSelectedCalendar({ externalId: "b@example.com" }),
+      ];
+      const { ungrouped, groups } = groupSelectedCalendarsByConflictGroup(calendars);
+      expect(ungrouped).toHaveLength(2);
+      expect(groups.size).toBe(0);
+    });
+
+    it("buckets calendars sharing a conflictGroupId together, separately from ungrouped ones", () => {
+      const grouped1 = buildSelectedCalendar({ externalId: "radu@example.com", conflictGroupId: "team-a" });
+      const grouped2 = buildSelectedCalendar({ externalId: "diana@example.com", conflictGroupId: "team-a" });
+      const ungroupedCal = buildSelectedCalendar({ externalId: "personal@example.com" });
+
+      const { ungrouped, groups } = groupSelectedCalendarsByConflictGroup([
+        grouped1,
+        ungroupedCal,
+        grouped2,
+      ]);
+
+      expect(ungrouped).toEqual([ungroupedCal]);
+      expect(groups.size).toBe(1);
+      expect(groups.get("team-a")).toEqual([grouped1, grouped2]);
+    });
+  });
+
+  describe("fn: mergeOverlappingBusyTimes", () => {
+    it("merges overlapping and adjacent busy periods into one", () => {
+      const busyTimes: EventBusyDate[] = [
+        { start: "2024-01-01T10:00:00.000Z", end: "2024-01-01T11:00:00.000Z" },
+        { start: "2024-01-01T10:30:00.000Z", end: "2024-01-01T12:00:00.000Z" },
+      ];
+      const merged = mergeOverlappingBusyTimes(busyTimes);
+      expect(merged).toHaveLength(1);
+      expect(merged[0].start.toISOString()).toBe("2024-01-01T10:00:00.000Z");
+      expect(merged[0].end.toISOString()).toBe("2024-01-01T12:00:00.000Z");
+    });
+
+    it("keeps non-overlapping busy periods separate, sorted by start", () => {
+      const busyTimes: EventBusyDate[] = [
+        { start: "2024-01-01T14:00:00.000Z", end: "2024-01-01T15:00:00.000Z" },
+        { start: "2024-01-01T10:00:00.000Z", end: "2024-01-01T11:00:00.000Z" },
+      ];
+      const merged = mergeOverlappingBusyTimes(busyTimes);
+      expect(merged).toHaveLength(2);
+      expect(merged[0].start.toISOString()).toBe("2024-01-01T10:00:00.000Z");
+      expect(merged[1].start.toISOString()).toBe("2024-01-01T14:00:00.000Z");
+    });
+  });
+
+  describe("fn: intersectBusyTimesAcrossCalendars", () => {
+    it("returns only the overlapping window when both calendars are busy", () => {
+      // Radu busy 10:00-12:00, Diana busy 11:00-13:00 -> both busy only 11:00-12:00
+      const raduBusy: EventBusyDate[] = [
+        { start: "2024-01-01T10:00:00.000Z", end: "2024-01-01T12:00:00.000Z" },
+      ];
+      const dianaBusy: EventBusyDate[] = [
+        { start: "2024-01-01T11:00:00.000Z", end: "2024-01-01T13:00:00.000Z" },
+      ];
+
+      const result = intersectBusyTimesAcrossCalendars([raduBusy, dianaBusy]);
+      expect(result).toHaveLength(1);
+      expect(new Date(result[0].start).toISOString()).toBe("2024-01-01T11:00:00.000Z");
+      expect(new Date(result[0].end).toISOString()).toBe("2024-01-01T12:00:00.000Z");
+    });
+
+    it("returns nothing busy when one calendar has no busy time at all (someone is always free)", () => {
+      const raduBusy: EventBusyDate[] = [
+        { start: "2024-01-01T10:00:00.000Z", end: "2024-01-01T12:00:00.000Z" },
+      ];
+      const dianaBusy: EventBusyDate[] = [];
+
+      const result = intersectBusyTimesAcrossCalendars([raduBusy, dianaBusy]);
+      expect(result).toHaveLength(0);
+    });
+
+    it("returns nothing busy when the two calendars' busy periods never overlap", () => {
+      const raduBusy: EventBusyDate[] = [
+        { start: "2024-01-01T09:00:00.000Z", end: "2024-01-01T10:00:00.000Z" },
+      ];
+      const dianaBusy: EventBusyDate[] = [
+        { start: "2024-01-01T14:00:00.000Z", end: "2024-01-01T15:00:00.000Z" },
+      ];
+
+      const result = intersectBusyTimesAcrossCalendars([raduBusy, dianaBusy]);
+      expect(result).toHaveLength(0);
     });
   });
 

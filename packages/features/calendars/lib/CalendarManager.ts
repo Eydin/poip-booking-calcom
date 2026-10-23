@@ -5,6 +5,7 @@ import dayjs from "@calcom/dayjs";
 import getCalendarsEvents, {
   getCalendarsEventsWithTimezones,
 } from "@calcom/features/calendars/lib/getCalendarsEvents";
+import { intersect, type DateRange } from "@calcom/features/schedules/lib/date-ranges";
 import { getRichDescription, getUid } from "@calcom/lib/CalEventParser";
 import { CalendarAppDelegationCredentialError } from "@calcom/lib/CalendarAppError";
 import { ORGANIZER_EMAIL_EXEMPT_DOMAINS } from "@calcom/lib/constants";
@@ -104,6 +105,8 @@ export const getCalendarCredentialsWithoutDelegation = (credentials: CredentialP
 export type ConnectedCalendar = Omit<IntegrationCalendar, "primary"> & {
   primary: boolean | null;
   isSelected: boolean;
+  /** AND-conflict-group this calendar belongs to, if any. See getBusyCalendarTimes. */
+  conflictGroupId: string | null;
   readOnly: boolean;
   credentialId: number;
   delegationCredentialId: string | null;
@@ -111,7 +114,7 @@ export type ConnectedCalendar = Omit<IntegrationCalendar, "primary"> & {
 
 export const getConnectedCalendars = async (
   calendarCredentials: ReturnType<typeof getCalendarCredentials>,
-  selectedCalendars: { externalId: string }[],
+  selectedCalendars: { externalId: string; conflictGroupId?: string | null }[],
   destinationCalendarExternalId?: string
 ): Promise<{
   connectedCalendars: {
@@ -156,11 +159,15 @@ export const getConnectedCalendars = async (
         const cals = await calendarInstance.listCalendars();
         const calendars: ConnectedCalendar[] = sortBy(
           cals.map((cal: IntegrationCalendar) => {
+            const matchingSelectedCalendar = selectedCalendars.find(
+              (selected) => selected.externalId === cal.externalId
+            );
             return {
               ...cal,
               readOnly: cal.readOnly || false,
               primary: cal.primary || null,
-              isSelected: selectedCalendars.some((selected) => selected.externalId === cal.externalId),
+              isSelected: !!matchingSelectedCalendar,
+              conflictGroupId: matchingSelectedCalendar?.conflictGroupId ?? null,
               credentialId,
               delegationCredentialId,
             };
@@ -293,6 +300,69 @@ export const deduplicateCredentialsBasedOnSelectedCalendars = ({
   return deduplicatedCredentials.filter((credential) => !credentialIdsToRemove.includes(credential.id));
 };
 
+/**
+ * Splits selected calendars into the "ordinary" set (checked with the default OR semantics —
+ * busy if ANY of them is busy) and any conflictGroupId groups (checked with AND semantics —
+ * busy only if ALL calendars sharing that group are busy at once). AND groups let one account
+ * check conflicts across several people's calendars (e.g. two practitioners sharing a booking
+ * page) without the full Team/Round-Robin feature.
+ */
+export function groupSelectedCalendarsByConflictGroup(selectedCalendars: SelectedCalendar[]) {
+  const ungrouped: SelectedCalendar[] = [];
+  const groups = new Map<string, SelectedCalendar[]>();
+
+  for (const calendar of selectedCalendars) {
+    const groupId = calendar.conflictGroupId;
+    if (!groupId) {
+      ungrouped.push(calendar);
+      continue;
+    }
+    const group = groups.get(groupId) ?? [];
+    group.push(calendar);
+    groups.set(groupId, group);
+  }
+
+  return { ungrouped, groups };
+}
+
+/** Merges overlapping/adjacent busy periods for a single calendar into a sorted, non-overlapping list. */
+export function mergeOverlappingBusyTimes(
+  busyTimes: (EventBusyDate & { timeZone?: string })[]
+): DateRange[] {
+  const sorted = busyTimes
+    .map((busyTime) => ({ start: dayjs(busyTime.start), end: dayjs(busyTime.end) }))
+    .sort((a, b) => a.start.valueOf() - b.start.valueOf());
+
+  const merged: DateRange[] = [];
+  for (const range of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && range.start.valueOf() <= last.end.valueOf()) {
+      if (range.end.valueOf() > last.end.valueOf()) {
+        last.end = range.end;
+      }
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return merged;
+}
+
+/** AND-combines busy times from several calendars: only the time ranges where every calendar is busy. */
+export function intersectBusyTimesAcrossCalendars(
+  perCalendarBusyTimes: (EventBusyDate & { timeZone?: string })[][]
+): (EventBusyDate & { timeZone?: string })[] {
+  const perCalendarRanges = perCalendarBusyTimes.map(mergeOverlappingBusyTimes);
+  if (perCalendarRanges.some((ranges) => ranges.length === 0)) {
+    // If any calendar in the group has no busy time in range, the group can never be
+    // simultaneously busy, so AND-combined busy time is empty.
+    return [];
+  }
+  return intersect(perCalendarRanges).map((range) => ({
+    start: range.start.toISOString(),
+    end: range.end.toISOString(),
+  }));
+}
+
 export const getBusyCalendarTimes = async (
   /**
    * withCredentials can possibly have duplicate credential in case DelegationCredential is enabled.
@@ -311,41 +381,41 @@ export const getBusyCalendarTimes = async (
 ) => {
   let results: (EventBusyDate & { timeZone?: string })[][] = [];
 
-  const deduplicatedCredentials = deduplicateCredentialsBasedOnSelectedCalendars({
-    credentials: withCredentials,
-    selectedCalendars,
-  });
-
-  if (deduplicatedCredentials.length !== withCredentials.length) {
-    log.info(
-      "Deduplicated credentials and removed",
-      withCredentials.length - deduplicatedCredentials.length,
-      "duplicates. Total number of credentials now is",
-      deduplicatedCredentials.length
-    );
-  }
-
   // const months = getMonths(dateFrom, dateTo);
   // Subtract 11 hours from the start date to avoid problems in UTC- time zones.
   const startDate = dayjs(dateFrom).subtract(11, "hours").format();
   // Add 14 hours from the start date to avoid problems in UTC+ time zones.
   const endDate = dayjs(dateTo).add(14, "hours").format();
-  try {
+
+  const fetchBusyTimesFor = async (calendars: SelectedCalendar[]) => {
+    if (!calendars.length) return [] as (EventBusyDate & { timeZone?: string })[][];
+    const deduplicatedCredentials = deduplicateCredentialsBasedOnSelectedCalendars({
+      credentials: withCredentials,
+      selectedCalendars: calendars,
+    });
     if (includeTimeZone) {
-      results = await getCalendarsEventsWithTimezones(
-        deduplicatedCredentials,
-        startDate,
-        endDate,
-        selectedCalendars
+      return getCalendarsEventsWithTimezones(deduplicatedCredentials, startDate, endDate, calendars);
+    }
+    return getCalendarsEvents(deduplicatedCredentials, startDate, endDate, calendars, mode ?? "slots");
+  };
+
+  try {
+    const { ungrouped, groups } = groupSelectedCalendarsByConflictGroup(selectedCalendars);
+
+    // Ungrouped calendars keep today's behaviour exactly: fetched together, unioned (OR semantics).
+    results = await fetchBusyTimesFor(ungrouped);
+
+    // Each AND group needs its member calendars fetched individually (so attribution isn't
+    // lost when a provider batches several calendars into one request), then intersected.
+    for (const calendarsInGroup of Array.from(groups.values())) {
+      if (calendarsInGroup.length === 1) {
+        results.push(...(await fetchBusyTimesFor(calendarsInGroup)));
+        continue;
+      }
+      const perCalendarBusyTimes = await Promise.all(
+        calendarsInGroup.map(async (calendar) => (await fetchBusyTimesFor([calendar])).flat())
       );
-    } else {
-      results = await getCalendarsEvents(
-        deduplicatedCredentials,
-        startDate,
-        endDate,
-        selectedCalendars,
-        mode ?? "slots"
-      );
+      results.push(intersectBusyTimesAcrossCalendars(perCalendarBusyTimes));
     }
   } catch (e) {
     log.warn(`Error getting calendar availability`, {
