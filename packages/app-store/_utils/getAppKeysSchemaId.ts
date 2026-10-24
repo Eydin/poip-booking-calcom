@@ -8,6 +8,8 @@
  * Any runtime lookup into appKeysSchemas by dirName must go through this same
  * mapping, or it silently resolves to undefined for Stripe specifically.
  */
-export function getAppKeysSchemaId(dirName: string): string {
+export function getAppKeysSchemaId(dirName: string): string;
+export function getAppKeysSchemaId(dirName: string | undefined): string | undefined;
+export function getAppKeysSchemaId(dirName: string | undefined): string | undefined {
   return dirName === "stripepayment" ? "stripe" : dirName;
 }
