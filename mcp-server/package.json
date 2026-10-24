@@ -1,0 +1,12 @@
+{
+  "name": "calcom-event-types-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local MCP server for creating and managing Cal.com event types on this booking deployment",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.1"
+  }
+}
