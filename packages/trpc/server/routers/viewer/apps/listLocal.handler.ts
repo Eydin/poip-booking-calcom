@@ -1,4 +1,5 @@
 import { appKeysSchemas } from "@calcom/app-store/apps.keys-schemas.generated";
+import { getAppKeysSchemaId } from "@calcom/app-store/_utils/getAppKeysSchemaId";
 import { getLocalAppMetadata } from "@calcom/app-store/utils";
 import type { PrismaClient } from "@calcom/prisma";
 import type { Prisma } from "@calcom/prisma/client";
@@ -60,10 +61,7 @@ export const listLocalHandler = async ({ ctx, input }: ListLocalOptions) => {
       };
     }
 
-    // appKeysSchemas is keyed by dirName, except stripepayment which is keyed as "stripe"
-    // (packages/app-store-cli/src/build.ts's getAppId hack) - mirror that here.
-    const appKeysSchemaId = app.dirName === "stripepayment" ? "stripe" : app.dirName;
-    const keysSchema = appKeysSchemas[appKeysSchemaId as keyof typeof appKeysSchemas];
+    const keysSchema = appKeysSchemas[getAppKeysSchemaId(app.dirName) as keyof typeof appKeysSchemas];
 
     const keys: Record<string, string> = {};
 
