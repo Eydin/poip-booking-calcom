@@ -58,9 +58,14 @@ function StripePaymentFormInner({
 
     setState({ status: "idle" });
     // The booking confirms asynchronously once Stripe's webhook reaches the
-    // server; the booking success page already handles a booking that is
-    // still momentarily pending.
-    router.push(`/booking/${bookingUid}`);
+    // server, which can lag slightly behind this client-side confirmation.
+    // When Stripe already told us the intent succeeded, say so via
+    // redirect_status so the booking success page shows "confirmed" right
+    // away instead of waiting on the webhook; it also auto-refreshes itself
+    // as a fallback in the meantime.
+    const intent = paymentOption === "HOLD" ? result.setupIntent : result.paymentIntent;
+    const query = intent?.status === "succeeded" ? "?redirect_status=succeeded" : "";
+    router.push(`/booking/${bookingUid}${query}`);
   };
 
   return (

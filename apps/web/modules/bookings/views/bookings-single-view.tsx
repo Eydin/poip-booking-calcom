@@ -296,6 +296,22 @@ export default function Success(props: PageProps) {
       !bookingInfo.seatsReferences.some((reference) => reference.referenceUid === seatReferenceUid));
 
   useEffect(() => {
+    // The payment webhook can lag slightly behind the booker landing here, so
+    // poll for the booking to flip to confirmed instead of requiring a manual
+    // refresh. Capped so a genuinely stuck payment doesn't poll forever.
+    if (!isAwaitingPayment || isCancelled) return;
+    let attempts = 0;
+    const maxAttempts = 15;
+    const interval = setInterval(() => {
+      attempts += 1;
+      router.refresh();
+      if (attempts >= maxAttempts) clearInterval(interval);
+    }, 3000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAwaitingPayment, isCancelled]);
+
+  useEffect(() => {
     setDate(date.tz(localStorage.getItem("timeOption.preferredTimeZone") || CURRENT_TIMEZONE));
     setIs24h(props?.userTimeFormat ? props.userTimeFormat === 24 : !!getIs24hClockFromLocalStorage());
     // eslint-disable-next-line react-hooks/exhaustive-deps
