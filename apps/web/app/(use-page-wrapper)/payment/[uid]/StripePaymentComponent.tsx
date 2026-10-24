@@ -63,7 +63,7 @@ function StripePaymentFormInner({
     // redirect_status so the booking success page shows "confirmed" right
     // away instead of waiting on the webhook; it also auto-refreshes itself
     // as a fallback in the meantime.
-    const intent = paymentOption === "HOLD" ? result.setupIntent : result.paymentIntent;
+    const intent = "setupIntent" in result ? result.setupIntent : result.paymentIntent;
     const query = intent?.status === "succeeded" ? "?redirect_status=succeeded" : "";
     router.push(`/booking/${bookingUid}${query}`);
   };
