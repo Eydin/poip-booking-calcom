@@ -1,15 +1,15 @@
 import type { NextRequest } from "next/server";
 import type { Session } from "next-auth";
 
-import { getUserFromSession } from "@calcom/features/auth/lib/userFromSessionUtils";
+import { getUserSession } from "@calcom/features/auth/lib/userFromSessionUtils";
 import { HttpError } from "@calcom/lib/http-error";
 import prisma from "@calcom/prisma";
 
 /**
  * Authenticates a request from the local calcom-event-types MCP server (a bearer
  * secret, not a real session) and builds the exact same ctx.user shape the real
- * tRPC session middleware builds, by reusing getUserFromSession with a synthetic
- * session for the single fixed Cal.com account this endpoint acts as.
+ * tRPC session middleware builds (isAuthed also calls getUserSession), by passing
+ * a synthetic session for the single fixed Cal.com account this endpoint acts as.
  */
 export async function getMcpActingUser(req: NextRequest) {
   const expectedSecret = process.env.MCP_EVENT_TYPES_SECRET;
@@ -36,7 +36,7 @@ export async function getMcpActingUser(req: NextRequest) {
   }
 
   const fakeSession = { user: { id: targetUser.id } } as unknown as Session;
-  const user = await getUserFromSession({ locale: "en" }, fakeSession);
+  const { user } = await getUserSession({ locale: "en", session: fakeSession });
   if (!user) {
     throw new HttpError({ statusCode: 500, message: "Failed to build user context for MCP request" });
   }
