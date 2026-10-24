@@ -6,6 +6,7 @@ import type BaseEmail from "@calcom/emails/templates/_base-email";
 import type { EventNameObjectType } from "@calcom/features/eventtypes/lib/eventNaming";
 import { getEventName } from "@calcom/features/eventtypes/lib/eventNaming";
 import { formatCalEvent } from "@calcom/lib/formatCalendarEvent";
+import { getExtraOrganizerEmailRecipients } from "@calcom/lib/getExtraOrganizerEmailRecipients";
 import logger from "@calcom/lib/logger";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import { withReporting } from "@calcom/lib/sentryWrapper";
@@ -96,6 +97,12 @@ const _sendScheduledEmailsAndSMS = async (
           sendEmail(() => new OrganizerScheduledEmail({ calEvent: formattedCalEvent, teamMember }))
         );
       }
+    }
+
+    for (const teamMember of getExtraOrganizerEmailRecipients(formattedCalEvent)) {
+      emailsToSend.push(
+        sendEmail(() => new OrganizerScheduledEmail({ calEvent: formattedCalEvent, teamMember }))
+      );
     }
   }
 
@@ -298,6 +305,12 @@ const _sendRescheduledEmailsAndSMS = async (
         );
       }
     }
+
+    for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent)) {
+      emailsToSend.push(
+        sendEmail(() => new OrganizerRescheduledEmail({ calEvent: calendarEvent, teamMember }))
+      );
+    }
   }
 
   if (!shouldSkipAttendeeEmailWithSettings(eventTypeMetadata, organizationSettings, EmailType.RESCHEDULED)) {
@@ -450,6 +463,10 @@ const _sendOrganizerRequestEmail = async (calEvent: CalendarEvent, eventTypeMeta
     }
   }
 
+  for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent)) {
+    emailsToSend.push(sendEmail(() => new OrganizerRequestEmail({ calEvent: calendarEvent, teamMember })));
+  }
+
   await Promise.all(emailsToSend);
 };
 
@@ -525,6 +542,12 @@ export const sendCancelledEmailsAndSMS = async (
           sendEmail(() => new OrganizerCancelledEmail({ calEvent: calendarEvent, teamMember }))
         );
       }
+    }
+
+    for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent)) {
+      emailsToSend.push(
+        sendEmail(() => new OrganizerCancelledEmail({ calEvent: calendarEvent, teamMember }))
+      );
     }
   }
 
