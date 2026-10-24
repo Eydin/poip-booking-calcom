@@ -99,7 +99,7 @@ const _sendScheduledEmailsAndSMS = async (
       }
     }
 
-    for (const teamMember of getExtraOrganizerEmailRecipients(formattedCalEvent)) {
+    for (const teamMember of getExtraOrganizerEmailRecipients(formattedCalEvent, eventTypeMetadata)) {
       emailsToSend.push(
         sendEmail(() => new OrganizerScheduledEmail({ calEvent: formattedCalEvent, teamMember }))
       );
@@ -306,7 +306,7 @@ const _sendRescheduledEmailsAndSMS = async (
       }
     }
 
-    for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent)) {
+    for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent, eventTypeMetadata)) {
       emailsToSend.push(
         sendEmail(() => new OrganizerRescheduledEmail({ calEvent: calendarEvent, teamMember }))
       );
@@ -463,7 +463,7 @@ const _sendOrganizerRequestEmail = async (calEvent: CalendarEvent, eventTypeMeta
     }
   }
 
-  for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent)) {
+  for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent, eventTypeMetadata)) {
     emailsToSend.push(sendEmail(() => new OrganizerRequestEmail({ calEvent: calendarEvent, teamMember })));
   }
 
@@ -544,7 +544,7 @@ export const sendCancelledEmailsAndSMS = async (
       }
     }
 
-    for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent)) {
+    for (const teamMember of getExtraOrganizerEmailRecipients(calendarEvent, eventTypeMetadata)) {
       emailsToSend.push(
         sendEmail(() => new OrganizerCancelledEmail({ calEvent: calendarEvent, teamMember }))
       );

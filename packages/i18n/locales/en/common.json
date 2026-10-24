@@ -2530,6 +2530,8 @@
   "default_app_link_description": "Setting a default app link allows all newly created event types to use the app link you set.",
   "organizer_default_conferencing_app": "Organizer's default app",
   "organizer_default_conferencing_app_not_found": "{{organizer}} has no default conferencing app",
+  "organizer_cc_emails": "Notify additional emails",
+  "organizer_cc_emails_description": "These addresses get the same booking confirmation, calendar invite, and cancellation/reschedule updates as you.",
   "under_maintenance": "Down for maintenance",
   "under_maintenance_description": "The {{appName}} team are performing scheduled maintenance. If you have any questions, please contact support.",
   "event_type_seats": "{{numberOfSeats}} seats",

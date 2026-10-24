@@ -30,6 +30,7 @@ import type { EditableSchema, fieldSchema } from "@calcom/prisma/zod-utils";
 import type { RouterOutputs } from "@calcom/trpc/react";
 import classNames from "@calcom/ui/classNames";
 import { Alert } from "@calcom/ui/components/alert";
+import { MultiEmail } from "@calcom/ui/components/address";
 import { Badge } from "@calcom/ui/components/badge";
 import { Button } from "@calcom/ui/components/button";
 import {
@@ -1511,6 +1512,16 @@ export const EventAdvancedTab = ({
           />
         </>
       )}
+      <div className="border-subtle rounded-lg border px-4 py-6 sm:px-6">
+        <Label className="mb-0 text-sm font-semibold">{t("organizer_cc_emails")}</Label>
+        <p className="text-subtle mb-4 mt-1 text-sm">{t("organizer_cc_emails_description")}</p>
+        <Controller
+          name="metadata.organizerCcEmails"
+          render={({ field: { value, onChange } }) => (
+            <MultiEmail label={t("add_emails")} value={value ?? []} readOnly={false} setValue={onChange} />
+          )}
+        />
+      </div>
       {showEventNameTip && (
         <CustomEventTypeModal
           close={closeEventNameTip}

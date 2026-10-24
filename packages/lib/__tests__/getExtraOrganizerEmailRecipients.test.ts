@@ -42,4 +42,22 @@ describe("getExtraOrganizerEmailRecipients", () => {
     const result = getExtraOrganizerEmailRecipients({ organizer });
     expect(result).toEqual([{ ...organizer, email: "diana@example.com" }]);
   });
+
+  it("merges the site-wide env list with the event type's own CC list, deduped", async () => {
+    const getExtraOrganizerEmailRecipients = await loadWithEnv("diana@example.com");
+    const result = getExtraOrganizerEmailRecipients(
+      { organizer },
+      { organizerCcEmails: ["diana@example.com", "assistant@example.com"] }
+    );
+    expect(result).toEqual([
+      { ...organizer, email: "diana@example.com" },
+      { ...organizer, email: "assistant@example.com" },
+    ]);
+  });
+
+  it("works from the event type's CC list alone, with no env var set", async () => {
+    const getExtraOrganizerEmailRecipients = await loadWithEnv(undefined);
+    const result = getExtraOrganizerEmailRecipients({ organizer }, { organizerCcEmails: ["diana@example.com"] });
+    expect(result).toEqual([{ ...organizer, email: "diana@example.com" }]);
+  });
 });

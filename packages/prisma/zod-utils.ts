@@ -149,6 +149,7 @@ const _eventTypeMetaDataSchemaWithoutApps = z.object({
   multipleDuration: z.number().array().optional(),
   hideDurationSelectorInBookingPage: z.boolean().optional(),
   giphyThankYouPage: z.string().optional(),
+  organizerCcEmails: z.array(z.string().email()).optional(),
   additionalNotesRequired: z.boolean().optional(),
   disableSuccessPage: z.boolean().optional(),
   disableStandardEmails: z
