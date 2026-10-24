@@ -64,7 +64,10 @@ export const generateMetadata = async ({ params, searchParams }: PageProps) => {
   );
 };
 
-export const getServerSideProps: Parameters<typeof withAppDirSsr<PaymentPageProps>>[0] = async (
+// Named getPaymentPageProps, not getServerSideProps: Next.js's App Router
+// build refuses any file under app/ that exports a symbol literally named
+// getServerSideProps, even unused as the page's own data fetcher.
+export const getPaymentPageProps: Parameters<typeof withAppDirSsr<PaymentPageProps>>[0] = async (
   context
 ) => {
   const parsedParams = paramsSchema.safeParse(context.params);
@@ -165,7 +168,7 @@ export const getServerSideProps: Parameters<typeof withAppDirSsr<PaymentPageProp
   };
 };
 
-const getData = withAppDirSsr<PaymentPageProps>(getServerSideProps);
+const getData = withAppDirSsr<PaymentPageProps>(getPaymentPageProps);
 
 const ServerPage = async ({ params, searchParams }: PageProps) => {
   const props = await getData(

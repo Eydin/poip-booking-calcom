@@ -11,7 +11,7 @@ vi.mock("@calcom/prisma", () => ({
 
 import prisma from "@calcom/prisma";
 
-import { getServerSideProps } from "../page";
+import { getPaymentPageProps as getServerSideProps } from "../page";
 
 const mockPrisma = prisma as unknown as { payment: { findUnique: ReturnType<typeof vi.fn> } };
 
