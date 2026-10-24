@@ -60,7 +60,10 @@ export const listLocalHandler = async ({ ctx, input }: ListLocalOptions) => {
       };
     }
 
-    const keysSchema = appKeysSchemas[app.dirName as keyof typeof appKeysSchemas];
+    // appKeysSchemas is keyed by dirName, except stripepayment which is keyed as "stripe"
+    // (packages/app-store-cli/src/build.ts's getAppId hack) - mirror that here.
+    const appKeysSchemaId = app.dirName === "stripepayment" ? "stripe" : app.dirName;
+    const keysSchema = appKeysSchemas[appKeysSchemaId as keyof typeof appKeysSchemas];
 
     const keys: Record<string, string> = {};
 
