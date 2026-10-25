@@ -127,18 +127,18 @@ const metadataSchema = z
       .passthrough()
       .optional(),
     organizerCcEmails: z.array(z.string().email()).optional().describe("Extra addresses CC'd on organizer notifications"),
-    secondDayInvite: z
-      .object({
-        enabled: z.boolean().optional(),
-        offsetDays: z.number().int().min(1).optional().describe("Days after the booking's start date, e.g. 1 for 'the next day'"),
-        startTime: z.string().optional().describe('24h "HH:mm" in the event type\'s locked timezone (or the organizer\'s timezone), e.g. "09:30"'),
-        endTime: z.string().optional().describe('24h "HH:mm", e.g. "19:00"'),
-        titleSuffix: z.string().optional().describe('Appended to the event title for this second invite, e.g. "(Day 2)"'),
-      })
-      .partial()
+    additionalDayInvites: z
+      .array(
+        z.object({
+          offsetDays: z.number().int().min(1).describe("Days after the booking's start date, e.g. 1 for 'the next day', 2 for 'two days later'"),
+          startTime: z.string().describe('24h "HH:mm" in the event type\'s locked timezone (or the organizer\'s timezone), e.g. "09:30"'),
+          endTime: z.string().describe('24h "HH:mm", e.g. "19:00"'),
+          titleSuffix: z.string().optional().describe('Appended to the event title for this invite, e.g. "(Day 2)". Defaults to "(Day {offsetDays + 1})" when omitted'),
+        })
+      )
       .optional()
       .describe(
-        "Sends an additional, separate calendar invite for a later day of a multi-day program (e.g. day 2), on top of the normal invite for the booked slot. Does not change the booking's own bookable time."
+        "One entry per extra day of a multi-day program (day 2, day 3, day 4, ...): sends an additional, separate calendar invite for that day, on top of the normal invite for the booked slot. Does not change the booking's own bookable time."
       ),
   })
   .passthrough()

@@ -152,21 +152,23 @@ const _eventTypeMetaDataSchemaWithoutApps = z.object({
   organizerCcEmails: z.array(z.string().email()).optional(),
   /**
    * For a multi-day event type that is only ever bookable as a single slot
-   * (e.g. the first day), this sends a second, separate calendar invite for
-   * a later day of the same program - in addition to the normal invite for
-   * the booked slot itself. The booking's own start/end time is unaffected.
+   * (e.g. day 1), this sends one additional, separate calendar invite per
+   * list entry for a later day of the same program - in addition to the
+   * normal invite for the booked slot itself. The booking's own start/end
+   * time is unaffected. One entry per extra day (day 2, day 3, day 4, ...).
    */
-  secondDayInvite: z
-    .object({
-      enabled: z.boolean().optional(),
-      /** Days after the booking's start date that the second invite falls on, e.g. 1 for "the next day". */
-      offsetDays: z.number().int().min(1).optional(),
-      /** 24h "HH:mm", interpreted in the event type's locked timezone (or the organizer's timezone otherwise). */
-      startTime: z.string().optional(),
-      endTime: z.string().optional(),
-      /** Appended to the event title for this second invite, e.g. "(Day 2)". */
-      titleSuffix: z.string().optional(),
-    })
+  additionalDayInvites: z
+    .array(
+      z.object({
+        /** Days after the booking's start date this invite falls on, e.g. 1 for "the next day", 2 for "two days later". */
+        offsetDays: z.number().int().min(1),
+        /** 24h "HH:mm", interpreted in the event type's locked timezone (or the organizer's timezone otherwise). */
+        startTime: z.string(),
+        endTime: z.string(),
+        /** Appended to the event title for this invite, e.g. "(Day 2)". Defaults to "(Day {offsetDays + 1})" when omitted. */
+        titleSuffix: z.string().optional(),
+      })
+    )
     .optional(),
   additionalNotesRequired: z.boolean().optional(),
   disableSuccessPage: z.boolean().optional(),

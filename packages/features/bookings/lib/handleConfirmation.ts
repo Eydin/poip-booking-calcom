@@ -17,7 +17,7 @@ import { BookingStatus, WebhookTriggerEvents } from "@calcom/prisma/enums";
 import type { PlatformClientParams } from "@calcom/prisma/zod-utils";
 import { EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
 import type { AdditionalInformation, CalendarEvent } from "@calcom/types/Calendar";
-import { createSecondDayInvite } from "./createSecondDayInvite";
+import { createAdditionalDayInvites } from "./createAdditionalDayInvites";
 import { getCalEventResponses } from "./getCalEventResponses";
 import { scheduleNoShowTriggers } from "./handleNewBooking/scheduleNoShowTriggers";
 
@@ -80,8 +80,8 @@ export async function handleConfirmation(args: {
   const areCalendarEventsEnabled = platformClientParams?.areCalendarEventsEnabled ?? true;
   const scheduleResult = await eventManager.create(evt, { skipCalendarEvent: !areCalendarEventsEnabled });
   const results = scheduleResult.results;
-  const secondDayInviteReferences = areCalendarEventsEnabled
-    ? await createSecondDayInvite({ evt, eventTypeMetadata, eventManager })
+  const additionalDayInviteReferences = areCalendarEventsEnabled
+    ? await createAdditionalDayInvites({ evt, eventTypeMetadata, eventManager })
     : [];
   const metadata: AdditionalInformation = {};
   const spanContext = distributedTracing.createSpan(traceContext, "handle_confirmation");
@@ -253,7 +253,7 @@ export async function handleConfirmation(args: {
       data: {
         status: BookingStatus.ACCEPTED,
         references: {
-          create: [...scheduleResult.referencesToCreate, ...secondDayInviteReferences],
+          create: [...scheduleResult.referencesToCreate, ...additionalDayInviteReferences],
         },
         metadata: {
           ...(typeof booking.metadata === "object" ? booking.metadata : {}),
