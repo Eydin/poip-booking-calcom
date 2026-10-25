@@ -3,8 +3,6 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import prisma from "@calcom/prisma";
-
 import { getMcpActingUser } from "../event-types/_shared";
 
 const dateRangeSchema = z.object({ start: z.coerce.date(), end: z.coerce.date() });
