@@ -85,7 +85,21 @@ const bookingFieldSchema = z
     placeholder: z.string().optional(),
     required: z.boolean().optional(),
     hidden: z.boolean().optional().describe("If true, the field is not shown on the booking page at all"),
-    options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+    options: z
+      .array(
+        z.object({
+          label: z.string(),
+          value: z.string(),
+          price: z
+            .number()
+            .min(0)
+            .optional()
+            .describe(
+              "For 'select' or 'checkbox' fields only (NOT 'radio' - its price-matching is broken in this Cal.com version, it silently charges $0 extra). Added to the event's base Stripe price, in major currency units (e.g. 500 for 500.00 CZK)."
+            ),
+        })
+      )
+      .optional(),
   })
   .passthrough();
 
@@ -113,6 +127,19 @@ const metadataSchema = z
       .passthrough()
       .optional(),
     organizerCcEmails: z.array(z.string().email()).optional().describe("Extra addresses CC'd on organizer notifications"),
+    secondDayInvite: z
+      .object({
+        enabled: z.boolean().optional(),
+        offsetDays: z.number().int().min(1).optional().describe("Days after the booking's start date, e.g. 1 for 'the next day'"),
+        startTime: z.string().optional().describe('24h "HH:mm" in the event type\'s locked timezone (or the organizer\'s timezone), e.g. "09:30"'),
+        endTime: z.string().optional().describe('24h "HH:mm", e.g. "19:00"'),
+        titleSuffix: z.string().optional().describe('Appended to the event title for this second invite, e.g. "(Day 2)"'),
+      })
+      .partial()
+      .optional()
+      .describe(
+        "Sends an additional, separate calendar invite for a later day of a multi-day program (e.g. day 2), on top of the normal invite for the booked slot. Does not change the booking's own bookable time."
+      ),
   })
   .passthrough()
   .describe("Pass the full current metadata object on every write - it is replaced, not merged. Read it first with get_event_type.");

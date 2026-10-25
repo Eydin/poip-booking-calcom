@@ -150,6 +150,24 @@ const _eventTypeMetaDataSchemaWithoutApps = z.object({
   hideDurationSelectorInBookingPage: z.boolean().optional(),
   giphyThankYouPage: z.string().optional(),
   organizerCcEmails: z.array(z.string().email()).optional(),
+  /**
+   * For a multi-day event type that is only ever bookable as a single slot
+   * (e.g. the first day), this sends a second, separate calendar invite for
+   * a later day of the same program - in addition to the normal invite for
+   * the booked slot itself. The booking's own start/end time is unaffected.
+   */
+  secondDayInvite: z
+    .object({
+      enabled: z.boolean().optional(),
+      /** Days after the booking's start date that the second invite falls on, e.g. 1 for "the next day". */
+      offsetDays: z.number().int().min(1).optional(),
+      /** 24h "HH:mm", interpreted in the event type's locked timezone (or the organizer's timezone otherwise). */
+      startTime: z.string().optional(),
+      endTime: z.string().optional(),
+      /** Appended to the event title for this second invite, e.g. "(Day 2)". */
+      titleSuffix: z.string().optional(),
+    })
+    .optional(),
   additionalNotesRequired: z.boolean().optional(),
   disableSuccessPage: z.boolean().optional(),
   disableStandardEmails: z
