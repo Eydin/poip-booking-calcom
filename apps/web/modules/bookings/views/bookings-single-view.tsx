@@ -932,6 +932,14 @@ export default function Success(props: PageProps) {
                                   )}
                                 </>
                               </div>
+                              {!props.recurringBookings &&
+                                !isBookingInPast &&
+                                canReschedule &&
+                                isWithinMinimumRescheduleNotice && (
+                                  <div className="text-subtle mt-2 text-center text-sm">
+                                    {t("reschedule_window_passed")}
+                                  </div>
+                                )}
                             </>
                           )}
                         </>

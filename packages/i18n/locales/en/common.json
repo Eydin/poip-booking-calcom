@@ -779,6 +779,7 @@
   "enter_phone_number": "Enter phone number",
   "reschedule": "Reschedule",
   "reschedule_this": "Reschedule instead",
+  "reschedule_window_passed": "It's too close to the start time to reschedule online. Please contact us at +420 792 908 296 (call or WhatsApp) to make changes. Late cancellation/rescheduling fees may apply.",
   "book_a_team_member": "Book a team member instead",
   "or": "OR",
   "go_back": "Go back",
