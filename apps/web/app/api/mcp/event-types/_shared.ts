@@ -35,7 +35,10 @@ export async function getMcpActingUser(req: NextRequest) {
     throw new HttpError({ statusCode: 500, message: `No Cal.com user found for ${targetEmail}` });
   }
 
-  const fakeSession = { user: { id: targetUser.id } } as unknown as Session;
+  const fakeSession = {
+    user: { id: targetUser.id },
+    upId: `usr-${targetUser.id}`,
+  } as unknown as Session;
   const { user } = await getUserSession({ locale: "en", session: fakeSession });
   if (!user) {
     throw new HttpError({ statusCode: 500, message: "Failed to build user context for MCP request" });
