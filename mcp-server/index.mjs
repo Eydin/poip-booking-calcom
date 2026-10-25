@@ -102,7 +102,7 @@ const metadataSchema = z
             price: z.number().int().describe("Amount in the smallest currency unit, e.g. 420000 for 4,200.00 CZK"),
             currency: z.string().describe('Lowercase ISO code, e.g. "czk", "usd"'),
             paymentOption: z.enum(["ON_BOOKING", "HOLD"]).optional().describe("ON_BOOKING = collect payment on booking (default)"),
-            refundPolicy: z.enum(["NEVER", "ALWAYS", "DAYS"]).optional(),
+            refundPolicy: z.enum(["never", "always", "days"]).optional(),
             refundDaysCount: z.number().optional(),
             refundCountCalendarDays: z.boolean().optional(),
           })
