@@ -52,10 +52,10 @@ import { MultiplePrivateLinksController } from "@calcom/web/modules/event-types/
 import AddVerifiedEmail from "@calcom/web/modules/event-types/components/AddVerifiedEmail";
 import { BookerLayoutSelector } from "@calcom/web/modules/settings/components/BookerLayoutSelector";
 import { TimezoneSelect as WebTimezoneSelect } from "@calcom/web/modules/timezone/components/TimezoneSelect";
-import { InfoIcon, PencilIcon } from "@coss/ui/icons";
+import { InfoIcon, PencilIcon, XIcon } from "@coss/ui/icons";
 import type { Dispatch, SetStateAction } from "react";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { Controller, useFormContext } from "react-hook-form";
+import { Controller, useFieldArray, useFormContext } from "react-hook-form";
 import type { z } from "zod";
 import type { CustomEventTypeModalClassNames } from "./CustomEventTypeModal";
 import CustomEventTypeModal from "./CustomEventTypeModal";
@@ -602,6 +602,15 @@ export const EventAdvancedTab = ({
   const TimezoneSelect = useMemo(() => {
     return isPlatform ? PlatformTimzoneSelect : WebTimezoneSelect;
   }, [isPlatform]);
+
+  const {
+    fields: additionalDayInviteFields,
+    append: appendAdditionalDayInvite,
+    remove: removeAdditionalDayInvite,
+  } = useFieldArray({
+    control: formMethods.control,
+    name: "metadata.additionalDayInvites",
+  });
 
   return (
     <div className="stack-y-4 flex flex-col">
@@ -1521,6 +1530,78 @@ export const EventAdvancedTab = ({
             <MultiEmail label={t("add_emails")} value={value ?? []} readOnly={false} setValue={onChange} />
           )}
         />
+      </div>
+      <div className="border-subtle rounded-lg border px-4 py-6 sm:px-6">
+        <Label className="mb-0 text-sm font-semibold">{t("additional_day_invites_title")}</Label>
+        <p className="text-subtle mb-4 mt-1 text-sm">{t("additional_day_invites_description")}</p>
+        <div className="flex flex-col gap-3">
+          {additionalDayInviteFields.map((field, index) => {
+            const offsetDays = formMethods.watch(`metadata.additionalDayInvites.${index}.offsetDays`);
+            return (
+              <div
+                key={field.id}
+                className="flex flex-col gap-3 rounded-md border border-subtle p-4 sm:flex-row sm:items-end">
+                <div className="w-full sm:w-32">
+                  <TextField
+                    label={t("additional_day_invites_day_offset_label")}
+                    type="number"
+                    min={1}
+                    step={1}
+                    {...formMethods.register(`metadata.additionalDayInvites.${index}.offsetDays`, {
+                      valueAsNumber: true,
+                    })}
+                  />
+                </div>
+                <div className="w-full sm:w-36">
+                  <TextField
+                    label={t("start_time")}
+                    type="time"
+                    {...formMethods.register(`metadata.additionalDayInvites.${index}.startTime`)}
+                  />
+                </div>
+                <div className="w-full sm:w-36">
+                  <TextField
+                    label={t("end_time")}
+                    type="time"
+                    {...formMethods.register(`metadata.additionalDayInvites.${index}.endTime`)}
+                  />
+                </div>
+                <div className="w-full flex-1">
+                  <TextField
+                    label={t("additional_day_invites_title_suffix_label")}
+                    placeholder={`(Day ${(offsetDays || 0) + 1})`}
+                    {...formMethods.register(`metadata.additionalDayInvites.${index}.titleSuffix`)}
+                  />
+                </div>
+                <button
+                  data-testid={`delete-additional-day-invite.${index}`}
+                  className="min-h-9 block h-9 px-2"
+                  type="button"
+                  onClick={() => removeAdditionalDayInvite(index)}
+                  aria-label={t("remove")}>
+                  <div className="h-4 w-4">
+                    <XIcon className="hover:text-emphasis text-subtle h-4 w-4" />
+                  </div>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <Button
+          color="minimal"
+          data-testid="add-additional-day-invite"
+          className="mt-4"
+          onClick={() =>
+            appendAdditionalDayInvite({
+              offsetDays: additionalDayInviteFields.length + 1,
+              startTime: "09:00",
+              endTime: "17:00",
+              titleSuffix: "",
+            })
+          }
+          StartIcon="plus">
+          {t("additional_day_invites_add_button")}
+        </Button>
       </div>
       {showEventNameTip && (
         <CustomEventTypeModal
