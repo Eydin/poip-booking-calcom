@@ -84,7 +84,12 @@ export const BookingFields = ({
     }).format(price)})`;
 
   const getFieldWithDirectPricing = (field: Fields[number]) => {
-    if (!fieldTypesConfigMap[field.type]?.supportsPricing || !field.label || !field.price) {
+    if (
+      !fieldTypesConfigMap[field.type]?.supportsPricing ||
+      !field.label ||
+      !field.price ||
+      field.hidePriceInLabel
+    ) {
       return field;
     }
 
@@ -101,7 +106,12 @@ export const BookingFields = ({
   };
 
   const getFieldWithOptionLevelPrices = (field: Fields[number]) => {
-    if (!fieldTypesConfigMap[field.type]?.optionsSupportPricing || !field.options) return field;
+    if (
+      !fieldTypesConfigMap[field.type]?.optionsSupportPricing ||
+      !field.options ||
+      field.hidePriceInLabel
+    )
+      return field;
 
     return {
       ...field,

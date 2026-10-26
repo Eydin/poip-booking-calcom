@@ -1050,6 +1050,14 @@ export const baseFieldSchema = z.object({
   requireEmails: excludeOrRequireEmailSchema.optional(),
   // Price associated with the field which works like addons which users can add to the booking
   price: z.coerce.number().min(0).optional(),
+  /**
+   * When true, the booking page does not auto-append the "(formatted price)"
+   * suffix that Cal.com normally shows next to a priced field/option label.
+   * Useful when the label text already states the full price itself (e.g. a
+   * "Pay in full - 36,500 CZK now" option), where the auto-appended addon
+   * price would otherwise look like a separate, confusing extra charge.
+   */
+  hidePriceInLabel: z.boolean().optional(),
 });
 
 export const variantsConfigSchema = z.object({

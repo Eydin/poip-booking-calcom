@@ -795,6 +795,18 @@ function FieldEditDialog({
                       />
                     )}
 
+                    {showPriceField && (fieldType.supportsPricing || fieldType.optionsSupportPricing) && (
+                      <div className="mt-6">
+                        <CheckboxField
+                          data-testid="hide-price-in-label"
+                          description={t("hide_price_in_label")}
+                          descriptionAsLabel
+                          {...fieldForm.register("hidePriceInLabel", { setValueAs: Boolean })}
+                        />
+                        <p className="text-subtle mt-1 text-sm">{t("hide_price_in_label_description")}</p>
+                      </div>
+                    )}
+
                     <div className="mt-6">
                       <Controller
                         name="required"

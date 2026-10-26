@@ -85,6 +85,12 @@ const bookingFieldSchema = z
     placeholder: z.string().optional(),
     required: z.boolean().optional(),
     hidden: z.boolean().optional().describe("If true, the field is not shown on the booking page at all"),
+    hidePriceInLabel: z
+      .boolean()
+      .optional()
+      .describe(
+        "When true, suppresses Cal.com's normal auto-appended '(formatted price)' suffix on this field/option's booking-page label. Use when the label text already states the full price itself (e.g. a 'Pay in full - 36,500 CZK now' option), where the auto-appended addon price would otherwise look like a separate, confusing extra charge."
+      ),
     options: z
       .array(
         z.object({

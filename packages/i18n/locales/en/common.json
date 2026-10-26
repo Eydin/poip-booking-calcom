@@ -2538,6 +2538,8 @@
   "additional_day_invites_day_offset_label": "Days after day 1",
   "additional_day_invites_title_suffix_label": "Invite title suffix (optional)",
   "additional_day_invites_add_button": "Add another day",
+  "hide_price_in_label": "Hide price in booking page label",
+  "hide_price_in_label_description": "Cal.com normally appends the price to this label on the booking page. Turn this on if your label already states the full price itself, to avoid showing a confusing extra amount next to it.",
   "under_maintenance": "Down for maintenance",
   "under_maintenance_description": "The {{appName}} team are performing scheduled maintenance. If you have any questions, please contact support.",
   "event_type_seats": "{{numberOfSeats}} seats",
