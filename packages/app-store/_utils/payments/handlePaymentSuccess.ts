@@ -99,6 +99,9 @@ export async function handlePaymentSuccess(params: {
     select: {
       id: true,
       externalId: true,
+      amount: true,
+      currency: true,
+      paymentOption: true,
     },
   });
 
@@ -113,6 +116,15 @@ export async function handlePaymentSuccess(params: {
   });
 
   const [payment, updatedBooking] = await prisma.$transaction([paymentUpdate, bookingUpdate]);
+
+  // So the confirmation email (both the "Pay in full"/"Deposit" choice and
+  // HOLD no-show-fee setups) shows the amount actually charged, matching
+  // what the booking success page already displays from the Payment record.
+  evt.paymentInfo = {
+    amount: payment.amount,
+    currency: payment.currency,
+    paymentOption: payment.paymentOption,
+  };
 
   const platformClientParams = platformOAuthClient ? getPlatformParams(platformOAuthClient) : undefined;
   const teamId = await getTeamIdFromEventType({
