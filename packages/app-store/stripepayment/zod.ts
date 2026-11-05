@@ -33,7 +33,14 @@ export const appDataSchema = eventTypeAppCardZod.merge(
 
 export const appKeysSchema = z.object({
   client_id: z.string().startsWith("ca_").min(1),
-  client_secret: z.string().startsWith("sk_").min(1),
+  // Accepts a full secret key (sk_) or a restricted key (rk_) - Stripe
+  // supports using either as the platform's own API key.
+  client_secret: z
+    .string()
+    .min(1)
+    .refine((val) => val.startsWith("sk_") || val.startsWith("rk_"), {
+      message: 'Must start with "sk_" or "rk_"',
+    }),
   public_key: z.string().startsWith("pk_").min(1),
   webhook_secret: z.string().startsWith("whsec_").min(1),
 });
