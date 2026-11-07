@@ -2231,6 +2231,13 @@ async function handler(
     !!booking &&
     !bookerChoseBankTransfer;
 
+  // Populated below when the booker chose bank transfer, then merged into the
+  // booking.update() call further down (the one that persists references) -
+  // that call unconditionally overwrites `metadata` from an in-memory copy of
+  // `booking` taken before this point, so a separate direct write here would
+  // just get clobbered by it.
+  let bankTransferBookingMetadata: Record<string, string> | undefined;
+
   if (bookerChoseBankTransfer && booking && !isDryRun) {
     const bankTransferConfig = getBankTransferConfig();
     if (!bankTransferConfig) {
@@ -2246,21 +2253,13 @@ async function handler(
       bookingId: booking.id,
       message: `${eventType.title} ${booking.uid}`,
     });
-    await deps.prismaClient.booking.update({
-      where: { id: booking.id },
-      data: {
-        metadata: {
-          ...(typeof booking.metadata === "object" ? booking.metadata : {}),
-          ...buildBankTransferBookingMetadata({
-            iban: bankTransferConfig.iban,
-            accountHolderName: bankTransferConfig.accountHolderName,
-            spayd,
-            variableSymbol,
-            amount,
-            currency: paymentAppData.currency,
-          }),
-        },
-      },
+    bankTransferBookingMetadata = buildBankTransferBookingMetadata({
+      iban: bankTransferConfig.iban,
+      accountHolderName: bankTransferConfig.accountHolderName,
+      spayd,
+      variableSymbol,
+      amount,
+      currency: paymentAppData.currency,
     });
     evt.paymentInfo = {
       amount: paymentAppData.price,
@@ -2537,7 +2536,11 @@ async function handler(
         },
         data: {
           location: evt.location,
-          metadata: { ...(typeof booking.metadata === "object" && booking.metadata), ...metadata },
+          metadata: {
+            ...(typeof booking.metadata === "object" && booking.metadata),
+            ...metadata,
+            ...bankTransferBookingMetadata,
+          },
           references: {
             createMany: {
               data: referencesToCreate,
