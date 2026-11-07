@@ -262,6 +262,100 @@ server.tool(
   }
 );
 
+server.tool(
+  "get_embed_snippet",
+  "Get the Cal.com embed snippet for an event type, for embedding its live booking calendar directly on a page instead of linking out. Derives the calLink (username/slug) and self-hosted origin from the event type's own data (same inputs Cal.com's own dashboard 'Embed' button uses), and returns a ready-to-use vanilla JS/HTML inline-embed snippet plus the equivalent @calcom/embed-react usage.",
+  {
+    id: z.number().int().describe("Event type id, from list_event_types"),
+    layout: z.enum(["month_view", "week_view", "column_view"]).optional().describe("Calendar layout inside the embed. Defaults to month_view."),
+  },
+  async ({ id, layout = "month_view" }) => {
+    const data = await callApi(`/api/mcp/event-types/${id}`, { method: "GET" });
+    const eventType = data.eventType ?? data;
+    const slug = eventType.slug;
+    const username = eventType.users?.[0]?.username ?? eventType.team?.slug;
+    if (!slug || !username) {
+      throw new Error(
+        `Could not determine calLink for event type ${id}: slug=${slug ?? "<missing>"}, username=${username ?? "<missing>"}`
+      );
+    }
+    const calLink = `${username}/${slug}`;
+    const namespace = slug;
+    const elementId = `cal-inline-${slug}`;
+
+    const htmlSnippet = `<!-- Cal.com inline embed for "${eventType.title ?? slug}" -->
+<script type="text/javascript">
+  (function (C, A, L) {
+    let p = function (a, ar) { a.q.push(ar); };
+    let d = C.document;
+    C.Cal = C.Cal || function () {
+      let cal = C.Cal;
+      let ar = arguments;
+      if (!cal.loaded) {
+        cal.ns = {};
+        cal.q = cal.q || [];
+        d.head.appendChild(d.createElement("script")).src = A;
+        cal.loaded = true;
+      }
+      if (ar[0] === L) {
+        const api = function () { p(api, arguments); };
+        const namespace = ar[1];
+        api.q = api.q || [];
+        if (typeof namespace === "string") {
+          cal.ns[namespace] = cal.ns[namespace] || api;
+          p(cal.ns[namespace], ar);
+          p(cal, ["initNamespace", namespace]);
+        } else p(cal, ar);
+        return;
+      }
+      p(cal, ar);
+    };
+  })(window, "${BASE_URL}/embed/embed.js", "init");
+
+  Cal("init", "${namespace}", { origin: "${BASE_URL}" });
+
+  Cal.ns["${namespace}"]("inline", {
+    elementOrSelector: "#${elementId}",
+    calLink: "${calLink}",
+    config: { layout: "${layout}" },
+  });
+
+  Cal.ns["${namespace}"]("ui", {
+    theme: "light",
+    layout: "${layout}",
+    hideEventTypeDetails: false,
+  });
+</script>
+<div style="width:100%;height:100%;overflow:scroll" id="${elementId}"></div>`;
+
+    const reactSnippet = `// npm install @calcom/embed-react
+"use client";
+import Cal, { getCalApi } from "@calcom/embed-react";
+import { useEffect } from "react";
+
+export function ${slug.replace(/[^a-zA-Z0-9]/g, "")}BookingEmbed() {
+  useEffect(() => {
+    (async function () {
+      const cal = await getCalApi({ namespace: "${namespace}" });
+      cal("ui", { theme: "light", layout: "${layout}", hideEventTypeDetails: false });
+    })();
+  }, []);
+
+  return (
+    <Cal
+      namespace="${namespace}"
+      calLink="${calLink}"
+      calOrigin="${BASE_URL}"
+      style={{ width: "100%", height: "100%", overflow: "scroll" }}
+      config={{ layout: "${layout}" }}
+    />
+  );
+}`;
+
+    return toToolResult({ calLink, calOrigin: BASE_URL, namespace, elementId, layout, htmlSnippet, reactSnippet });
+  }
+);
+
 // ---------------------------------------------------------------------------
 // Availability schedules
 // ---------------------------------------------------------------------------
