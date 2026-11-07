@@ -615,6 +615,36 @@ export default function Success(props: PageProps) {
                             </div>
                           </>
                         )}
+                        {!props.paymentStatus &&
+                          bookingInfo.status === BookingStatus.PENDING &&
+                          parsedBookingMetadata?.bankTransferSpayd && (
+                            <>
+                              <div className="font-medium">{t("pay_by_bank_transfer")}</div>
+                              <div className="col-span-2 mb-6 last:mb-0">
+                                <Price
+                                  currency={parsedBookingMetadata.bankTransferCurrency ?? "CZK"}
+                                  price={convertToSmallestCurrencyUnit(
+                                    Number(parsedBookingMetadata.bankTransferAmount),
+                                    parsedBookingMetadata.bankTransferCurrency ?? "CZK"
+                                  )}
+                                />
+                                <p className="mt-2 text-sm">
+                                  {t("bank_transfer_account")}: {parsedBookingMetadata.bankTransferIban}
+                                </p>
+                                <p className="text-sm">
+                                  {t("bank_transfer_variable_symbol")}:{" "}
+                                  {parsedBookingMetadata.bankTransferVariableSymbol}
+                                </p>
+                                <div className="mt-3 bg-white p-3" style={{ width: 192 }}>
+                                  <QRCode
+                                    value={parsedBookingMetadata.bankTransferSpayd}
+                                    size={176}
+                                  />
+                                </div>
+                                <p className="mt-2 text-sm">{t("bank_transfer_qr_instructions")}</p>
+                              </div>
+                            </>
+                          )}
                         <div className="font-medium">{t("what")}</div>
                         <div
                           className="wrap-break-word col-span-2 mb-6 last:mb-0"
@@ -741,37 +771,6 @@ export default function Success(props: PageProps) {
                             </div>
                           </>
                         )}
-                        {!props.paymentStatus &&
-                          bookingInfo.status === BookingStatus.PENDING &&
-                          parsedBookingMetadata?.bankTransferSpayd && (
-                            <>
-                              <div className="mt-3 font-medium">{t("pay_by_bank_transfer")}</div>
-                              <div className="col-span-2 mb-2 mt-3">
-                                <Price
-                                  currency={parsedBookingMetadata.bankTransferCurrency ?? "CZK"}
-                                  price={convertToSmallestCurrencyUnit(
-                                    Number(parsedBookingMetadata.bankTransferAmount),
-                                    parsedBookingMetadata.bankTransferCurrency ?? "CZK"
-                                  )}
-                                />
-                                <p className="mt-2 text-sm">
-                                  {t("bank_transfer_account")}: {parsedBookingMetadata.bankTransferIban}
-                                </p>
-                                <p className="text-sm">
-                                  {t("bank_transfer_variable_symbol")}:{" "}
-                                  {parsedBookingMetadata.bankTransferVariableSymbol}
-                                </p>
-                                <div className="mt-3 bg-white p-3" style={{ width: 192 }}>
-                                  <QRCode
-                                    value={parsedBookingMetadata.bankTransferSpayd}
-                                    size={176}
-                                  />
-                                </div>
-                                <p className="mt-2 text-sm">{t("bank_transfer_qr_instructions")}</p>
-                              </div>
-                            </>
-                          )}
-
                         {rescheduledToUid ? <RescheduledToLink rescheduledToUid={rescheduledToUid} /> : null}
 
                         {bookingInfo?.description && (
