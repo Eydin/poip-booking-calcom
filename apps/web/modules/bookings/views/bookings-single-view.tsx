@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
+import QRCode from "react-qr-code";
 import { Toaster } from "sonner";
 import { z } from "zod";
 
@@ -22,6 +23,7 @@ import {
   useIsEmbed,
 } from "@calcom/embed-core/embed-iframe";
 import { Price } from "@calcom/features/bookings/components/event-meta/Price";
+import { convertToSmallestCurrencyUnit } from "@calcom/lib/currencyConversions";
 import { getCalendarLinks, CalendarLinkType } from "@calcom/features/bookings/lib/getCalendarLinks";
 import { RATING_OPTIONS, validateRating } from "@calcom/features/bookings/lib/rating";
 import { isWithinMinimumRescheduleNotice as isWithinMinimumRescheduleNoticeUtil } from "@calcom/features/bookings/lib/reschedule/isWithinMinimumRescheduleNotice";
@@ -286,7 +288,8 @@ export default function Success(props: PageProps) {
   // - Event Type has require confirmation option enabled always
   // - EventType has conditionally enabled confirmation option based on how far the booking is scheduled.
   // - It's a paid event and payment is pending.
-  const needsConfirmation = bookingInfo.status === BookingStatus.PENDING && eventType.requiresConfirmation;
+  const needsConfirmation =
+    bookingInfo.status === BookingStatus.PENDING && (eventType.requiresConfirmation || !isAwaitingPayment);
   const userIsOwner = !!(session?.user?.id && eventType.owner?.id === session.user.id);
   const isLoggedIn = session?.user;
   const isCancelled =
@@ -738,6 +741,36 @@ export default function Success(props: PageProps) {
                             </div>
                           </>
                         )}
+                        {!props.paymentStatus &&
+                          bookingInfo.status === BookingStatus.PENDING &&
+                          parsedBookingMetadata?.bankTransferSpayd && (
+                            <>
+                              <div className="mt-3 font-medium">{t("pay_by_bank_transfer")}</div>
+                              <div className="col-span-2 mb-2 mt-3">
+                                <Price
+                                  currency={parsedBookingMetadata.bankTransferCurrency ?? "CZK"}
+                                  price={convertToSmallestCurrencyUnit(
+                                    Number(parsedBookingMetadata.bankTransferAmount),
+                                    parsedBookingMetadata.bankTransferCurrency ?? "CZK"
+                                  )}
+                                />
+                                <p className="mt-2 text-sm">
+                                  {t("bank_transfer_account")}: {parsedBookingMetadata.bankTransferIban}
+                                </p>
+                                <p className="text-sm">
+                                  {t("bank_transfer_variable_symbol")}:{" "}
+                                  {parsedBookingMetadata.bankTransferVariableSymbol}
+                                </p>
+                                <div className="mt-3 bg-white p-3" style={{ width: 192 }}>
+                                  <QRCode
+                                    value={parsedBookingMetadata.bankTransferSpayd}
+                                    size={176}
+                                  />
+                                </div>
+                                <p className="mt-2 text-sm">{t("bank_transfer_qr_instructions")}</p>
+                              </div>
+                            </>
+                          )}
 
                         {rescheduledToUid ? <RescheduledToLink rescheduledToUid={rescheduledToUid} /> : null}
 

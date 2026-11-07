@@ -146,6 +146,22 @@ export const BaseScheduledEmail = (
           withSpacer
         />
       )}
+      {props.calEvent.paymentInfo?.bankTransfer && (
+        <Info
+          label={t("pay_by_bank_transfer")}
+          description={[
+            `${t("bank_transfer_account")}: ${props.calEvent.paymentInfo.bankTransfer.iban}`,
+            props.calEvent.paymentInfo.bankTransfer.accountHolderName
+              ? `${t("bank_transfer_account_holder")}: ${props.calEvent.paymentInfo.bankTransfer.accountHolderName}`
+              : null,
+            `${t("bank_transfer_variable_symbol")}: ${props.calEvent.paymentInfo.bankTransfer.variableSymbol}`,
+            t("bank_transfer_qr_instructions"),
+          ]
+            .filter(Boolean)
+            .join("\n")}
+          withSpacer
+        />
+      )}
     </BaseEmailHtml>
   );
 };

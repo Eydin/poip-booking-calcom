@@ -27,6 +27,12 @@ type PaymentInfo = {
   paymentOption?: string | null;
   amount?: number;
   currency?: string;
+  bankTransfer?: {
+    iban: string;
+    spayd: string;
+    variableSymbol: string;
+    accountHolderName?: string;
+  } | null;
 };
 
 export type Person = {

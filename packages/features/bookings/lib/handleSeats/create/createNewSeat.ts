@@ -3,6 +3,12 @@ import { sendScheduledSeatsEmailsAndSMS } from "@calcom/emails/email-manager";
 import EventManager from "@calcom/features/bookings/lib/EventManager";
 import { refreshCredentials } from "@calcom/features/bookings/lib/getAllCredentialsForUsersOnEvent/refreshCredentials";
 import { handlePayment } from "@calcom/features/bookings/lib/handlePayment";
+import {
+  buildBankTransferBookingMetadata,
+  buildSpaydString,
+  getBankTransferConfig,
+  isBankTransferChosen,
+} from "@calcom/features/bookings/lib/payment/bankTransfer";
 import { ErrorCode } from "@calcom/lib/errorCodes";
 import { HttpError } from "@calcom/lib/http-error";
 import prisma from "@calcom/prisma";
@@ -194,6 +200,57 @@ const createNewSeat = async (
   if (!evt?.uid) {
     evt.uid = seatedBooking?.uid ?? null;
   }
+
+  const seatBookerChoseBankTransfer = paymentAppData.price > 0 && isBankTransferChosen(responses);
+  if (seatBookerChoseBankTransfer) {
+    const bankTransferConfig = getBankTransferConfig();
+    if (!bankTransferConfig) {
+      throw new HttpError({
+        statusCode: 400,
+        message: "Bank transfer payment is not configured",
+      });
+    }
+    const { spayd, variableSymbol, amount } = buildSpaydString({
+      iban: bankTransferConfig.iban,
+      amountMinorUnits: paymentAppData.price,
+      currency: paymentAppData.currency,
+      bookingId: seatedBooking.id,
+      message: `${eventType.title} ${seatedBooking.uid}`,
+    });
+    const existingBookingForMetadata = await prisma.booking.findUnique({
+      where: { id: seatedBooking.id },
+      select: { metadata: true },
+    });
+    await prisma.booking.update({
+      where: { id: seatedBooking.id },
+      data: {
+        metadata: {
+          ...(typeof existingBookingForMetadata?.metadata === "object"
+            ? existingBookingForMetadata.metadata
+            : {}),
+          ...buildBankTransferBookingMetadata({
+            iban: bankTransferConfig.iban,
+            accountHolderName: bankTransferConfig.accountHolderName,
+            spayd,
+            variableSymbol,
+            amount,
+            currency: paymentAppData.currency,
+          }),
+        },
+      },
+    });
+    evt.paymentInfo = {
+      amount: paymentAppData.price,
+      currency: paymentAppData.currency,
+      bankTransfer: {
+        iban: bankTransferConfig.iban,
+        spayd,
+        variableSymbol,
+        accountHolderName: bankTransferConfig.accountHolderName,
+      },
+    };
+  }
+
   const copyEvent = cloneDeep(evt);
   copyEvent.uid = seatedBooking.uid;
   if (noEmail !== true) {
@@ -220,7 +277,12 @@ const createNewSeat = async (
 
   const foundBooking = await findBookingQuery(seatedBooking.id);
 
-  if (!Number.isNaN(paymentAppData.price) && paymentAppData.price > 0 && !!seatedBooking) {
+  if (
+    !Number.isNaN(paymentAppData.price) &&
+    paymentAppData.price > 0 &&
+    !!seatedBooking &&
+    !seatBookerChoseBankTransfer
+  ) {
     const credentialPaymentAppCategories = await prisma.credential.findMany({
       where: {
         ...(paymentAppData.credentialId ? { id: paymentAppData.credentialId } : { userId: organizerUser.id }),

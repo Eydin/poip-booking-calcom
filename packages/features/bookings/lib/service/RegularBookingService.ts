@@ -25,6 +25,12 @@ import EventManager, { placeholderCreatedEvent } from "@calcom/features/bookings
 import { getAssignmentReasonCategory } from "@calcom/features/bookings/lib/getAssignmentReasonCategory";
 import type { CheckBookingAndDurationLimitsService } from "@calcom/features/bookings/lib/handleNewBooking/checkBookingAndDurationLimits";
 import { handlePayment } from "@calcom/features/bookings/lib/handlePayment";
+import {
+  buildBankTransferBookingMetadata,
+  buildSpaydString,
+  getBankTransferConfig,
+  isBankTransferChosen,
+} from "@calcom/features/bookings/lib/payment/bankTransfer";
 import { handleWebhookTrigger } from "@calcom/features/bookings/lib/handleWebhookTrigger";
 import { isEventTypeLoggingEnabled } from "@calcom/features/bookings/lib/isEventTypeLoggingEnabled";
 import type { BookingEmailAndSmsTasker } from "@calcom/features/bookings/lib/tasker/BookingEmailAndSmsTasker";
@@ -2215,11 +2221,58 @@ async function handler(
     );
   }
 
+  const bookerChoseBankTransfer =
+    paymentAppData.price > 0 && !!booking && isBankTransferChosen(reqBody.calEventResponses);
+
   const bookingRequiresPayment =
     !Number.isNaN(paymentAppData.price) &&
     paymentAppData.price > 0 &&
     !originalRescheduledBooking?.paid &&
-    !!booking;
+    !!booking &&
+    !bookerChoseBankTransfer;
+
+  if (bookerChoseBankTransfer && booking && !isDryRun) {
+    const bankTransferConfig = getBankTransferConfig();
+    if (!bankTransferConfig) {
+      throw new HttpError({
+        statusCode: 400,
+        message: "Bank transfer payment is not configured",
+      });
+    }
+    const { spayd, variableSymbol, amount } = buildSpaydString({
+      iban: bankTransferConfig.iban,
+      amountMinorUnits: paymentAppData.price,
+      currency: paymentAppData.currency,
+      bookingId: booking.id,
+      message: `${eventType.title} ${booking.uid}`,
+    });
+    await deps.prismaClient.booking.update({
+      where: { id: booking.id },
+      data: {
+        metadata: {
+          ...(typeof booking.metadata === "object" ? booking.metadata : {}),
+          ...buildBankTransferBookingMetadata({
+            iban: bankTransferConfig.iban,
+            accountHolderName: bankTransferConfig.accountHolderName,
+            spayd,
+            variableSymbol,
+            amount,
+            currency: paymentAppData.currency,
+          }),
+        },
+      },
+    });
+    evt.paymentInfo = {
+      amount: paymentAppData.price,
+      currency: paymentAppData.currency,
+      bankTransfer: {
+        iban: bankTransferConfig.iban,
+        spayd,
+        variableSymbol,
+        accountHolderName: bankTransferConfig.accountHolderName,
+      },
+    };
+  }
 
   if (!isConfirmedByDefault && noEmail !== true && !bookingRequiresPayment) {
     tracingLogger.debug(
