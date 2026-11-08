@@ -6,6 +6,7 @@ import { PrismaBookingPaymentRepository } from "@calcom/features/bookings/reposi
 import logger from "@calcom/lib/logger";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import prisma from "@calcom/prisma";
+import { BookingStatus } from "@calcom/prisma/enums";
 import { z } from "zod";
 
 const log = logger.getSubLogger({ prefix: ["sendAwaitingPaymentEmail"] });
@@ -39,6 +40,11 @@ export async function sendAwaitingPaymentEmail(payload: string): Promise<void> {
       log.debug(
         `Payment ${paymentId} already succeeded or booking ${bookingId} already paid, skipping email`
       );
+      return;
+    }
+
+    if (booking.status === BookingStatus.CANCELLED || booking.status === BookingStatus.REJECTED) {
+      log.debug(`Booking ${bookingId} is ${booking.status}, skipping awaiting payment email`);
       return;
     }
 
