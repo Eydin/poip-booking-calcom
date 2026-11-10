@@ -10,10 +10,11 @@ import { APP_NAME, WEBSITE_PRIVACY_POLICY_URL, WEBSITE_TERMS_URL } from "@calcom
 import { ErrorCode } from "@calcom/lib/errorCodes";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import type { TimeFormat } from "@calcom/lib/timeFormat";
+import { subscribeToNewsletter } from "@calcom/lib/newsletterSignup";
 import { Alert } from "@calcom/ui/components/alert";
 import { Button } from "@calcom/ui/components/button";
 import { EmptyScreen } from "@calcom/ui/components/empty-screen";
-import { Form } from "@calcom/ui/components/form";
+import { CheckboxField, Form } from "@calcom/ui/components/form";
 import type { TFunction } from "i18next";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -76,6 +77,7 @@ export const BookEventForm = ({
   const { timeFormat, timezone } = useBookerTime();
 
   const [responseVercelIdHeader] = useState<string | null>(null);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
   const { t, i18n } = useLocale();
 
   const isPaidEvent = useMemo(() => {
@@ -109,6 +111,17 @@ export const BookEventForm = ({
 
   const watchedCfToken = bookingForm.watch("cfToken");
 
+  const handleSubmit = () => {
+    if (newsletterOptIn) {
+      const email = bookingForm.getValues("responses.email");
+      if (email) {
+        // Best-effort: a newsletter signup hiccup should never block the booking.
+        subscribeToNewsletter(email).catch(() => undefined);
+      }
+    }
+    onSubmit();
+  };
+
   return (
     <div className="flex flex-col h-full">
       <Form
@@ -121,7 +134,7 @@ export const BookEventForm = ({
           setFormValues(values);
         }}
         form={bookingForm}
-        handleSubmit={onSubmit}
+        handleSubmit={handleSubmit}
         noValidate>
         <BookingFields
           isDynamicGroupBooking={!!(username && username.indexOf("+") > -1)}
@@ -131,6 +144,12 @@ export const BookEventForm = ({
           bookingData={bookingData}
           isPaidEvent={isPaidEvent}
           paymentCurrency={paymentCurrency}
+        />
+        <CheckboxField
+          className="mt-2"
+          description="Sign me up for The Path of Initiation Prague newsletter"
+          checked={newsletterOptIn}
+          onChange={(e) => setNewsletterOptIn(e.target.checked)}
         />
         {errors.hasFormErrors || errors.hasDataErrors ? (
           <div data-testid="booking-fail">

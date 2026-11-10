@@ -169,6 +169,25 @@ const createEventTypeFields = {
 
 // Superset of fields usable on update. Only pass what you want to change.
 const updateOnlyEventTypeFields = {
+  periodType: z
+    .enum(["UNLIMITED", "ROLLING", "ROLLING_WINDOW", "RANGE"])
+    .optional()
+    .describe(
+      "Booking window. UNLIMITED = no restriction (default) - use for classes/workshops with their own fixed dateOverrides schedule, so the class stays bookable right up to its date however far out that is. ROLLING = only the next periodDays days are ever bookable, rolling forward every day - use for on-demand 1:1 sessions to cap how far ahead someone can book (pair with periodDays + periodCountCalendarDays)."
+    ),
+  periodDays: z
+    .number()
+    .int()
+    .nullable()
+    .optional()
+    .describe("With periodType ROLLING/ROLLING_WINDOW: how many days ahead stay bookable, e.g. 3 for a 72-hour booking window."),
+  periodCountCalendarDays: z
+    .boolean()
+    .nullable()
+    .optional()
+    .describe("With periodType ROLLING/ROLLING_WINDOW: true = periodDays counts calendar days (normal choice, e.g. true+3 = 72 hours), false = counts only business days."),
+  periodStartDate: z.coerce.date().nullable().optional().describe("Required for periodType RANGE: window start."),
+  periodEndDate: z.coerce.date().nullable().optional().describe("Required for periodType RANGE: window end."),
   timeZone: z.string().nullish().describe("Required when lockTimeZoneToggleOnBookingPage is true, e.g. 'Europe/Prague'"),
   lockTimeZoneToggleOnBookingPage: z.boolean().optional().describe("Lock the booking page to a single timezone - useful for in-person events"),
   lockedTimeZone: z.string().nullish(),
