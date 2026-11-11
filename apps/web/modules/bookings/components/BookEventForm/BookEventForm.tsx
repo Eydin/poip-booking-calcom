@@ -147,7 +147,7 @@ export const BookEventForm = ({
         />
         <CheckboxField
           className="mt-2"
-          description="Sign me up for The Path of Initiation Prague newsletter"
+          description="Sign me up for The Path of Initiation and Modern Mystery School newsletters"
           checked={newsletterOptIn}
           onChange={(e) => setNewsletterOptIn(e.target.checked)}
         />
