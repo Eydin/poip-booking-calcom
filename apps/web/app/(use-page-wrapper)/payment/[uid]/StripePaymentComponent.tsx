@@ -24,6 +24,31 @@ export function buildConfirmReturnUrl(bookingUid: string) {
   return `${WEBAPP_URL}/booking/${bookingUid}`;
 }
 
+/**
+ * Payment methods that complete inside this page: card 3-D Secure, Link and the wallets open
+ * their own modal/sheet. Every other method (e.g. Klarna) sends the booker to its provider's site.
+ */
+const METHODS_PAYABLE_INSIDE_AN_IFRAME = new Set(["card", "link", "apple_pay", "google_pay"]);
+
+/**
+ * This page is often shown inside the booking embed (an iframe) on the main site. Providers'
+ * checkout sites generally refuse to load inside an iframe, so a booker who picks a
+ * redirect-based method there is first taken to this same payment page as a full page.
+ * Exported for testing.
+ */
+export function mustLeaveIframeToPay(paymentMethodType: string | null, isInIframe: boolean): boolean {
+  return isInIframe && !!paymentMethodType && !METHODS_PAYABLE_INSIDE_AN_IFRAME.has(paymentMethodType);
+}
+
+function isInIframe(): boolean {
+  try {
+    return window.self !== window.top;
+  } catch {
+    // Accessing window.top can throw in sandboxed iframes - which are iframes.
+    return true;
+  }
+}
+
 type SubmitState = { status: "idle" } | { status: "processing" } | { status: "error"; message: string };
 
 function StripePaymentFormInner({
@@ -35,16 +60,30 @@ function StripePaymentFormInner({
   const elements = useElements();
   const router = useRouter();
   const [state, setState] = useState<SubmitState>({ status: "idle" });
+  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const leavesIframe = mustLeaveIframeToPay(selectedMethod, isInIframe());
 
   const handleSubmit = async (ev: FormEvent) => {
     ev.preventDefault();
     if (!stripe || !elements) return;
 
+    if (leavesIframe && window.top) {
+      // Allowed from a cross-origin iframe because it follows this click (user activation);
+      // Location's href setter is one of the few things a cross-origin frame may use.
+      window.top.location.href = window.location.href;
+      return;
+    }
+
     setState({ status: "processing" });
 
     const result =
       paymentOption === "HOLD"
-        ? await stripe.confirmSetup({ elements, redirect: "if_required" })
+        ? await stripe.confirmSetup({
+            elements,
+            redirect: "if_required",
+            // Only used if the card's bank forces a full-page redirect; required by Stripe then.
+            confirmParams: { return_url: buildConfirmReturnUrl(bookingUid) },
+          })
         : await stripe.confirmPayment({
             elements,
             redirect: "if_required",
@@ -70,7 +109,17 @@ function StripePaymentFormInner({
 
   return (
     <form onSubmit={handleSubmit} className="mt-4">
-      <PaymentElement onChange={() => setState({ status: "idle" })} />
+      <PaymentElement
+        onChange={(event) => {
+          setState({ status: "idle" });
+          setSelectedMethod(event.value.type);
+        }}
+      />
+      {leavesIframe && (
+        <p className="text-subtle mt-2 text-sm" data-testid="continue-full-page-note">
+          This payment method continues on a full page - choose it again there to pay.
+        </p>
+      )}
       {state.status === "error" && (
         <p className="text-error mt-2 text-sm" role="alert">
           {state.message}
