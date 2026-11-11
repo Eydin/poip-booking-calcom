@@ -1,5 +1,6 @@
 import { getBookingFieldsWithSystemFields } from "@calcom/features/bookings/lib/getBookingFields";
 import { bookingResponsesDbSchema } from "@calcom/features/bookings/lib/getBookingResponsesSchema";
+import { withSeatBankTransferDetails } from "@calcom/features/bookings/lib/payment/bankTransfer";
 import prisma from "@calcom/prisma";
 import type { Prisma } from "@calcom/prisma/client";
 import { BookingStatus } from "@calcom/prisma/enums";
@@ -169,6 +170,7 @@ export const handleSeatsEventTypeOnBooking = async (
     };
     id: number;
     data: Prisma.JsonValue;
+    metadata: Prisma.JsonValue;
     bookingId: number;
     attendeeId: number;
     referenceUid: string;
@@ -198,6 +200,13 @@ export const handleSeatsEventTypeOnBooking = async (
     bookingInfo.description = seatAttendeeData.description ?? null;
     bookingInfo.responses = bookingResponsesDbSchema.parse(seatAttendeeData.responses ?? {});
   }
+
+  // Everyone in a seated event shares this booking: show only the viewing attendee's own
+  // bank-transfer QR/details (kept on their seat), never another attendee's.
+  bookingInfo.metadata = withSeatBankTransferDetails(
+    bookingInfo.metadata,
+    seatAttendee?.metadata
+  ) as Prisma.JsonValue;
 
   if (!eventType.seatsShowAttendees && !isHost) {
     if (seatAttendee) {

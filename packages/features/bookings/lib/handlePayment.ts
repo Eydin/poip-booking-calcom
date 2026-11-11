@@ -1,9 +1,10 @@
 import { PaymentServiceMap } from "@calcom/app-store/payment.services.generated";
 import type { EventTypeAppsList } from "@calcom/app-store/utils";
-import { eventTypeMetaDataSchemaWithTypedApps } from "@calcom/app-store/zod-utils";
 import type { Fields } from "@calcom/features/bookings/lib/getBookingFields";
-import { fieldTypesConfigMap } from "@calcom/features/form-builder/fieldTypes";
-import { convertToSmallestCurrencyUnit } from "@calcom/lib/currencyConversions";
+import {
+  calculatePaymentAmount,
+  getEventTypePaymentAppPricing,
+} from "@calcom/features/bookings/lib/payment/calculatePaymentAmount";
 import type { AppCategories, Prisma, EventType, PaymentOption } from "@calcom/prisma/client";
 import type { CalendarEvent } from "@calcom/types/Calendar";
 import type { IAbstractPaymentService } from "@calcom/types/PaymentService";
@@ -66,105 +67,16 @@ const handlePayment = async ({
   const createPaymentService = paymentAppModule.BuildPaymentService;
   const paymentInstance = createPaymentService(paymentAppCredentials) as IAbstractPaymentService;
 
-  const apps = eventTypeMetaDataSchemaWithTypedApps.parse(selectedEventType?.metadata)?.apps;
-  const appData = apps?.[paymentAppCredentials.appId] as
-    | { paymentOption?: string; currency?: string; price?: number; enabled?: boolean }
-    | undefined;
+  const appData = getEventTypePaymentAppPricing(selectedEventType?.metadata, paymentAppCredentials.appId);
 
   const paymentOption = (appData?.paymentOption || "ON_BOOKING") as PaymentOption;
-  const paymentCurrency = appData?.currency;
-  // Ensure we have a valid currency - fallback to USD if undefined
-  const currency = paymentCurrency || "USD";
 
-  let totalAmount = appData?.price || 0;
-
-  if ((bookingFields || [])?.length > 0) {
-    let addonsPrice = 0;
-
-    // Process each booking field
-    (bookingFields || []).forEach((field) => {
-      // Skip fields that don't support pricing
-      if (
-        !fieldTypesConfigMap[field.type]?.supportsPricing &&
-        !fieldTypesConfigMap[field.type]?.optionsSupportPricing
-      ) {
-        return;
-      }
-
-      // Type assertion for price-related fields
-      const typedInput = field as { price?: number; options?: { value: string; price?: number }[] };
-      const response = evt.responses?.[field.name];
-
-      // Skip if no response for this field
-      if (!response) return;
-
-      switch (field.type) {
-        case "number": {
-          // Multiply the numeric value by the field's price
-          const parsedValue = Number((response.value ?? "").toString().trim());
-          const safeValue = Number.isFinite(parsedValue) ? parsedValue : 0;
-          addonsPrice += safeValue * (typedInput.price || 0);
-          break;
-        }
-
-        case "boolean": {
-          // Add price if boolean field is true
-          if (response.value) {
-            addonsPrice += typedInput.price || 0;
-          }
-          break;
-        }
-
-        case "select":
-        case "radio": {
-          // For select and radio, find the selected option and add its price
-          const selectedValue = response.value;
-          let selectedOption;
-
-          if (field.type === "radio") {
-            // For radio, the value coming is the label itself (formatted with price)
-            selectedOption = typedInput.options?.find((opt) => {
-              const formattedValue = `${opt.value} (${Intl.NumberFormat(locale, {
-                style: "currency",
-                currency: currency,
-              }).format(opt.price || 0)})`;
-              return formattedValue === selectedValue;
-            });
-          } else {
-            // For select, match by direct value
-            selectedOption = typedInput.options?.find((opt) => opt.value === selectedValue);
-          }
-
-          addonsPrice += selectedOption?.price || 0;
-          break;
-        }
-
-        case "checkbox":
-        case "multiselect": {
-          // For checkbox and multiselect, add prices of all selected options
-          const responseValue = response.value;
-          const selectedValues = Array.isArray(responseValue)
-            ? responseValue
-            : responseValue
-              ? [responseValue]
-              : [];
-
-          selectedValues.forEach((value) => {
-            const option = typedInput.options?.find((opt) => opt.value === value);
-            addonsPrice += option?.price || 0;
-          });
-          break;
-        }
-      }
-    });
-
-    totalAmount += convertToSmallestCurrencyUnit(addonsPrice, currency);
-  }
-
-  const paymentPriceAndCurrency = {
-    amount: totalAmount,
-    currency: currency,
-  };
+  const paymentPriceAndCurrency = calculatePaymentAmount({
+    appData,
+    bookingFields,
+    responses: evt.responses,
+    locale,
+  });
 
   let paymentData;
   if (paymentOption === "HOLD") {

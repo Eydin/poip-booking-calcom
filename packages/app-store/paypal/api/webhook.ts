@@ -2,16 +2,13 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import getRawBody from "raw-body";
 import { z } from "zod";
 
-import { handlePaymentSuccess } from "@calcom/app-store/_utils/payments/handlePaymentSuccess";
-import { distributedTracing } from "@calcom/lib/tracing/factory";
 import { paypalCredentialKeysSchema } from "@calcom/app-store/paypal/lib";
 import Paypal from "@calcom/app-store/paypal/lib/Paypal";
+import { completePaypalOrder } from "@calcom/app-store/paypal/lib/completePaypalOrder";
 import { IS_PRODUCTION } from "@calcom/lib/constants";
 import { HttpError as HttpCode } from "@calcom/lib/http-error";
 import { getServerErrorFromUnknown } from "@calcom/lib/server/getServerErrorFromUnknown";
 import prisma from "@calcom/prisma";
-
-import appConfig from "../config.json";
 
 export const config = {
   api: {
@@ -46,9 +43,8 @@ export async function handlePaypalPaymentSuccess(
   });
 
   if (!booking) throw new HttpCode({ statusCode: 204, message: "No booking found" });
-  // Probably booking it's already paid from /capture but we need to send confirmation email
   const foundCredentials = await findPaymentCredentials(booking.id);
-  if (!foundCredentials) throw new HttpCode({ statusCode: 204, message: "No credentials found" });
+  if (!foundCredentials.clientId) throw new HttpCode({ statusCode: 204, message: "No credentials found" });
   const { webhookId, ...credentials } = foundCredentials;
 
   const paypalClient = new Paypal(credentials);
@@ -65,14 +61,13 @@ export async function handlePaypalPaymentSuccess(
     },
   });
 
-  const traceContext = distributedTracing.createTrace("paypal_webhook", {
-    meta: { paymentId: payment.id, bookingId: payment.bookingId },
-  });
-  return await handlePaymentSuccess({
-    paymentId: payment.id,
-    bookingId: payment.bookingId,
-    appSlug: appConfig.slug,
-    traceContext,
+  // The booker's return to api/capture normally captures the order first; this covers bookers
+  // who close the tab after approving. completePaypalOrder only confirms the booking once.
+  await completePaypalOrder({
+    orderId: payload.resource.id,
+    credentials,
+    expectedBookingId: booking.id,
+    source: "webhook",
   });
 }
 
@@ -100,7 +95,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: parsedPayload } = parse;
 
     if (parsedPayload.event_type === "CHECKOUT.ORDER.APPROVED") {
-      return await handlePaypalPaymentSuccess(parsedPayload, bodyAsString, parseHeaders.data);
+      await handlePaypalPaymentSuccess(parsedPayload, bodyAsString, parseHeaders.data);
     }
   } catch (_err) {
     const err = getServerErrorFromUnknown(_err);
@@ -120,17 +115,10 @@ const resourceSchema = z
   .object({
     create_time: z.string(),
     id: z.string(),
-    payment_source: z.object({
-      paypal: z.object({}).optional(),
-    }),
-    intent: z.string(),
-    payer: z.object({
-      email_address: z.string(),
-      payer_id: z.string(),
-      address: z.object({
-        country_code: z.string(),
-      }),
-    }),
+    // Only the order id is used; the rest is informational and varies by payer, so keep it loose.
+    payment_source: z.object({}).passthrough().optional(),
+    intent: z.string().optional(),
+    payer: z.object({}).passthrough().optional(),
     status: z.string().optional(),
   })
   .passthrough();

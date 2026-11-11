@@ -4,11 +4,12 @@ import EventManager from "@calcom/features/bookings/lib/EventManager";
 import { refreshCredentials } from "@calcom/features/bookings/lib/getAllCredentialsForUsersOnEvent/refreshCredentials";
 import { handlePayment } from "@calcom/features/bookings/lib/handlePayment";
 import {
-  buildBankTransferBookingMetadata,
-  buildSpaydString,
   getBankTransferConfig,
   isBankTransferChosen,
+  saveSeatBankTransferDetails,
 } from "@calcom/features/bookings/lib/payment/bankTransfer";
+import { getBookerCharge } from "@calcom/features/bookings/lib/payment/calculatePaymentAmount";
+import { getPaypalPaymentOverride, isPaypalChosen } from "@calcom/features/bookings/lib/payment/paypalChoice";
 import { ErrorCode } from "@calcom/lib/errorCodes";
 import { HttpError } from "@calcom/lib/http-error";
 import prisma from "@calcom/prisma";
@@ -210,38 +211,27 @@ const createNewSeat = async (
         message: "Bank transfer payment is not configured",
       });
     }
-    const { spayd, variableSymbol, amount } = buildSpaydString({
+    // The same amount card/PayPal would charge, incl. priced options like "Pay in full".
+    const charge = getBookerCharge({
+      eventTypeMetadata: eventType.metadata,
+      paymentAppData,
+      bookingFields: eventType.bookingFields,
+      responses: evt.responses,
+      locale: attendeeLanguage ?? "en",
+    });
+    // Stored on this attendee's own seat - the booking is shared with everyone in the class.
+    const { spayd, variableSymbol } = await saveSeatBankTransferDetails({
+      prismaClient: prisma,
+      seatReferenceUid: attendeeUniqueId,
       iban: bankTransferConfig.iban,
-      amountMinorUnits: paymentAppData.price,
-      currency: paymentAppData.currency,
-      bookingId: seatedBooking.id,
-      message: `${eventType.title} ${seatedBooking.uid}`,
-    });
-    const existingBookingForMetadata = await prisma.booking.findUnique({
-      where: { id: seatedBooking.id },
-      select: { metadata: true },
-    });
-    await prisma.booking.update({
-      where: { id: seatedBooking.id },
-      data: {
-        metadata: {
-          ...(typeof existingBookingForMetadata?.metadata === "object"
-            ? existingBookingForMetadata.metadata
-            : {}),
-          ...buildBankTransferBookingMetadata({
-            iban: bankTransferConfig.iban,
-            accountHolderName: bankTransferConfig.accountHolderName,
-            spayd,
-            variableSymbol,
-            amount,
-            currency: paymentAppData.currency,
-          }),
-        },
-      },
+      accountHolderName: bankTransferConfig.accountHolderName,
+      amountMinorUnits: charge.amount,
+      currency: charge.currency,
+      eventTitle: eventType.title,
     });
     evt.paymentInfo = {
-      amount: paymentAppData.price,
-      currency: paymentAppData.currency,
+      amount: charge.amount,
+      currency: charge.currency,
       bankTransfer: {
         iban: bankTransferConfig.iban,
         spayd,
@@ -283,6 +273,15 @@ const createNewSeat = async (
     !!seatedBooking &&
     !seatBookerChoseBankTransfer
   ) {
+    // The booker picked PayPal instead of the event type's own payment app (Stripe).
+    const paypalOverride = isPaypalChosen(responses)
+      ? await getPaypalPaymentOverride({
+          prismaClient: prisma,
+          organizerUserId: organizerUser.id,
+          paymentAppData,
+          metadata: eventType.metadata,
+        })
+      : null;
     const credentialPaymentAppCategories = await prisma.credential.findMany({
       where: {
         ...(paymentAppData.credentialId ? { id: paymentAppData.credentialId } : { userId: organizerUser.id }),
@@ -304,9 +303,11 @@ const createNewSeat = async (
       },
     });
 
-    const eventTypePaymentAppCredential = credentialPaymentAppCategories.find((credential) => {
-      return credential.appId === paymentAppData.appId;
-    });
+    const eventTypePaymentAppCredential =
+      paypalOverride?.credential ??
+      credentialPaymentAppCategories.find((credential) => {
+        return credential.appId === paymentAppData.appId;
+      });
 
     if (!eventTypePaymentAppCredential) {
       throw new HttpError({
@@ -325,12 +326,14 @@ const createNewSeat = async (
       evt,
       selectedEventType: {
         ...eventType,
-        metadata: eventType.metadata
-          ? {
-              ...eventType.metadata,
-              apps: eventType.metadata?.apps as Prisma.JsonValue,
-            }
-          : {},
+        metadata: paypalOverride
+          ? (paypalOverride.metadata as Prisma.JsonValue)
+          : eventType.metadata
+            ? {
+                ...eventType.metadata,
+                apps: eventType.metadata?.apps as Prisma.JsonValue,
+              }
+            : {},
       },
       paymentAppCredentials: eventTypePaymentAppCredential as IEventTypePaymentCredentialType,
       booking: seatedBooking,

@@ -4,8 +4,6 @@ import z from "zod";
 import { IS_PRODUCTION, WEBAPP_URL } from "@calcom/lib/constants";
 import { convertFromSmallestToPresentableCurrencyUnit } from "@calcom/lib/currencyConversions";
 import logger from "@calcom/lib/logger";
-import prisma from "@calcom/prisma";
-import type { Prisma } from "@calcom/prisma/client";
 
 class Paypal {
   url: string;
@@ -54,7 +52,8 @@ class Paypal {
       if (response.ok) {
         const { access_token, expires_in } = await response.json();
         this.accessToken = access_token;
-        this.expiresAt = Date.now() + expires_in;
+        // expires_in is in seconds
+        this.expiresAt = Date.now() + expires_in * 1000;
       } else if (response?.status) {
         console.error(`Request failed with status ${response.status}`);
       }
@@ -70,6 +69,7 @@ class Paypal {
     currency,
     returnUrl,
     cancelUrl,
+    description,
     intent = "CAPTURE",
   }: {
     referenceId: string;
@@ -77,6 +77,7 @@ class Paypal {
     currency: string;
     returnUrl: string;
     cancelUrl: string;
+    description?: string;
     intent?: "CAPTURE" | "AUTHORIZE";
   }): Promise<CreateOrderResponse> {
     const createOrderRequestBody: CreateOrderRequestBody = {
@@ -84,6 +85,8 @@ class Paypal {
       purchase_units: [
         {
           reference_id: referenceId,
+          // Shown to the payer in PayPal and on their receipt (PayPal caps it at 127 chars).
+          ...(description ? { description: description.slice(0, 127) } : {}),
           amount: {
             currency_code: currency,
             value: convertFromSmallestToPresentableCurrencyUnit(amount, currency).toString(),
@@ -93,6 +96,8 @@ class Paypal {
       payment_source: {
         paypal: {
           experience_context: {
+            // Bookings are services - don't make the payer pick a shipping address.
+            shipping_preference: "NO_SHIPPING",
             user_action: "PAY_NOW",
             return_url: returnUrl,
             cancel_url: cancelUrl,
@@ -122,62 +127,68 @@ class Paypal {
     return {} as CreateOrderResponse;
   }
 
-  async captureOrder(orderId: string): Promise<boolean> {
+  async getOrder(orderId: string): Promise<OrderWithCaptures | null> {
+    try {
+      const response = await this.fetcher(`/v2/checkout/orders/${orderId}`);
+      if (response.ok) {
+        return (await response.json()) as OrderWithCaptures;
+      }
+      console.error(`Get order request failed with status ${response.status}`);
+    } catch (error) {
+      console.error(error);
+    }
+    return null;
+  }
+
+  /**
+   * Captures an approved order. Safe to call more than once for the same order (the booker's
+   * return from PayPal and the CHECKOUT.ORDER.APPROVED webhook can race): if the order was
+   * already captured, PayPal rejects the capture and we fall back to reading the order.
+   * Returns null unless the order ends up COMPLETED.
+   */
+  async captureOrder(orderId: string): Promise<{ captureId: string | null } | null> {
     try {
       const captureResult = await this.fetcher(`/v2/checkout/orders/${orderId}/capture`, {
         method: "POST",
+        headers: { "PayPal-Request-Id": `capture-${orderId}` },
       });
       if (captureResult.ok) {
-        const result = await captureResult.json();
-        if (result?.status === "COMPLETED") {
-          // Get payment reference id
-
-          const payment = await prisma.payment.findFirst({
-            where: {
-              externalId: orderId,
-            },
-            select: {
-              id: true,
-              bookingId: true,
-              data: true,
-            },
-          });
-
-          if (!payment) {
-            throw new Error("Payment not found");
-          }
-
-          await prisma.payment.update({
-            where: {
-              id: payment?.id,
-            },
-            data: {
-              success: true,
-              data: Object.assign(
-                {},
-                { ...(payment?.data as Record<string, string | number>), capture: result.id }
-              ) as unknown as Prisma.InputJsonValue,
-            },
-          });
-
-          // Update booking as paid
-          await prisma.booking.update({
-            where: {
-              id: payment.bookingId,
-            },
-            data: {
-              status: "ACCEPTED",
-            },
-          });
-
-          return true;
+        const order = (await captureResult.json()) as OrderWithCaptures;
+        if (order?.status === "COMPLETED") {
+          return { captureId: getFirstCaptureId(order) };
         }
+      } else {
+        console.error(`Capture request failed with status ${captureResult.status}`);
       }
     } catch (error) {
       console.error(error);
-      throw error;
     }
-    return false;
+
+    const order = await this.getOrder(orderId);
+    if (order?.status === "COMPLETED") {
+      return { captureId: getFirstCaptureId(order) };
+    }
+    return null;
+  }
+
+  /** Fully refunds a capture. Returns true once PayPal has accepted the refund. */
+  async refundCapture(captureId: string): Promise<boolean> {
+    try {
+      const response = await this.fetcher(`/v2/payments/captures/${captureId}/refund`, {
+        method: "POST",
+        headers: { "PayPal-Request-Id": `refund-${captureId}` },
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) {
+        console.error(`Refund request failed with status ${response.status}`, await response.text());
+        return false;
+      }
+      const result = await response.json();
+      return result?.status === "COMPLETED" || result?.status === "PENDING";
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
   }
 
   async createWebhook(): Promise<boolean | string> {
@@ -302,12 +313,26 @@ class Paypal {
 
 export default Paypal;
 
+function getFirstCaptureId(order: OrderWithCaptures): string | null {
+  return order.purchase_units?.[0]?.payments?.captures?.[0]?.id ?? null;
+}
+
+export interface OrderWithCaptures {
+  id: string;
+  status: string;
+  purchase_units?: Array<{
+    reference_id?: string;
+    payments?: { captures?: Array<{ id: string; status: string }> };
+  }>;
+}
+
 interface PurchaseUnit {
   amount: {
     currency_code: string;
     value: string;
   };
   reference_id: string;
+  description?: string;
 }
 
 interface ExperienceContext {

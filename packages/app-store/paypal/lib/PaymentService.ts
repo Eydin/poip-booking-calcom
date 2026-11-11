@@ -2,12 +2,15 @@ import { v4 as uuidv4 } from "uuid";
 import z from "zod";
 
 import Paypal from "@calcom/app-store/paypal/lib/Paypal";
+import dayjs from "@calcom/dayjs";
+import tasker from "@calcom/features/tasker";
 import { WEBAPP_URL } from "@calcom/lib/constants";
 import { ErrorCode } from "@calcom/lib/errorCodes";
 import logger from "@calcom/lib/logger";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import prisma from "@calcom/prisma";
 import type { Booking, Payment, PaymentOption, Prisma } from "@calcom/prisma/client";
+import type { CalendarEvent } from "@calcom/types/Calendar";
 import type { IAbstractPaymentService } from "@calcom/types/PaymentService";
 
 import { paymentOptionEnum } from "../zod";
@@ -62,7 +65,11 @@ class PaypalPaymentService implements IAbstractPaymentService {
         currency: payment.currency,
         returnUrl: `${WEBAPP_URL}/api/integrations/paypal/capture?bookingUid=${booking.uid}`,
         cancelUrl: `${WEBAPP_URL}/payment/${uid}`,
+        description: booking.title,
       });
+      if (!orderResult?.id) {
+        throw new Error("Paypal: order could not be created");
+      }
       const paymentData = await prisma.payment.create({
         data: {
           uid,
@@ -98,8 +105,48 @@ class PaypalPaymentService implements IAbstractPaymentService {
   async update(): Promise<Payment> {
     throw new Error("Method not implemented.");
   }
-  async refund(): Promise<Payment> {
-    throw new Error("Method not implemented.");
+  /** Fully refunds a captured PayPal payment (called when a paid booking is cancelled). */
+  async refund(paymentId: Payment["id"]): Promise<Payment | null> {
+    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) {
+      return null;
+    }
+    if (!payment.success) {
+      throw new Error("Unable to refund failed payment");
+    }
+    if (payment.refunded) {
+      // refunded already, bail early as success without throwing an error.
+      return payment;
+    }
+    if (!this.credentials || !payment.externalId) {
+      throw new Error("Paypal: credentials or order id missing, can't refund");
+    }
+
+    const paypalClient = new Paypal({
+      clientId: this.credentials.client_id,
+      secretKey: this.credentials.secret_key,
+    });
+
+    // completePaypalOrder stores the capture id; fall back to reading it off the order.
+    const data = payment.data as Record<string, unknown> | null;
+    let captureId = typeof data?.captureId === "string" ? data.captureId : null;
+    if (!captureId) {
+      const order = await paypalClient.getOrder(payment.externalId);
+      captureId = order?.purchase_units?.[0]?.payments?.captures?.[0]?.id ?? null;
+    }
+    if (!captureId) {
+      throw new Error(`Paypal: no capture found for order ${payment.externalId}, can't refund`);
+    }
+
+    const refunded = await paypalClient.refundCapture(captureId);
+    if (!refunded) {
+      throw new Error(`Paypal: refund failed for capture ${captureId}`);
+    }
+
+    return prisma.payment.update({
+      where: { id: payment.id },
+      data: { refunded: true },
+    });
   }
 
   async collectCard(
@@ -187,8 +234,29 @@ class PaypalPaymentService implements IAbstractPaymentService {
   getPaymentDetails(): Promise<Payment> {
     throw new Error("Method not implemented.");
   }
-  afterPayment(): Promise<void> {
-    return Promise.resolve();
+  /**
+   * Same as Stripe: if the booker hasn't paid a few minutes after booking (e.g. they closed
+   * PayPal), email them a link back to the payment page. handlePaymentSuccess cancels the email
+   * once the payment completes.
+   */
+  async afterPayment(
+    event: CalendarEvent,
+    booking: { id: number; uid: string },
+    paymentData: Payment
+  ): Promise<void> {
+    const delayMinutes = Number(process.env.AWAITING_PAYMENT_EMAIL_DELAY_MINUTES) || 15;
+    await tasker.create(
+      "sendAwaitingPaymentEmail",
+      {
+        bookingId: booking.id,
+        paymentId: paymentData.id,
+        attendeeSeatId: event.attendeeSeatId || null,
+      },
+      {
+        scheduledAt: dayjs().add(delayMinutes, "minutes").toDate(),
+        referenceUid: booking.uid,
+      }
+    );
   }
   deletePayment(): Promise<boolean> {
     return Promise.resolve(false);
