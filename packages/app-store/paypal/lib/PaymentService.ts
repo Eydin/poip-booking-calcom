@@ -138,9 +138,9 @@ class PaypalPaymentService implements IAbstractPaymentService {
       throw new Error(`Paypal: no capture found for order ${payment.externalId}, can't refund`);
     }
 
-    const refunded = await paypalClient.refundCapture(captureId);
-    if (!refunded) {
-      throw new Error(`Paypal: refund failed for capture ${captureId}`);
+    const refund = await paypalClient.refundCapture(captureId);
+    if (!refund.ok) {
+      throw new Error(`PayPal refund failed for transaction ${captureId}: ${refund.reason}`);
     }
 
     return prisma.payment.update({

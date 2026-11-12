@@ -46,7 +46,7 @@ describe("PayPal PaymentService.refund", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     await prismock.payment.deleteMany();
-    refundCapture.mockResolvedValue(true);
+    refundCapture.mockResolvedValue({ ok: true });
   });
 
   it("refunds the stored capture and marks the payment refunded", async () => {
@@ -103,11 +103,13 @@ describe("PayPal PaymentService.refund", () => {
     expect((await prismock.payment.findUnique({ where: { id: payment.id } }))?.refunded).toBe(false);
   });
 
-  it("fails (and leaves the payment unrefunded) when PayPal rejects the refund", async () => {
+  it("fails with PayPal's reason (and leaves the payment unrefunded) when PayPal rejects the refund", async () => {
     const payment = await seedPayment();
-    refundCapture.mockResolvedValue(false);
+    refundCapture.mockResolvedValue({ ok: false, reason: "REFUND_FAILED_INSUFFICIENT_FUNDS: not enough money" });
 
-    await expect(service().refund(payment.id)).rejects.toThrow(/refund failed/);
+    await expect(service().refund(payment.id)).rejects.toThrow(
+      "PayPal refund failed for transaction CAPTURE_1: REFUND_FAILED_INSUFFICIENT_FUNDS: not enough money"
+    );
     expect((await prismock.payment.findUnique({ where: { id: payment.id } }))?.refunded).toBe(false);
   });
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "vitest-fetch-mock";
 
-import Paypal from "./Paypal";
+import Paypal, { describePaypalError } from "./Paypal";
 
 vi.mock("@calcom/prisma", () => ({
   default: {},
@@ -204,10 +204,10 @@ describe("Paypal.refundCapture", () => {
     fetchMock.resetMocks();
   });
 
-  it.each(["COMPLETED", "PENDING"])("returns true when PayPal reports the refund as %s", async (status) => {
+  it.each(["COMPLETED", "PENDING"])("succeeds when PayPal reports the refund as %s", async (status) => {
     fetchMock.mockResponses(TOKEN_RESPONSE, JSON.stringify({ id: "REFUND_1", status }));
 
-    expect(await newClient().refundCapture("CAPTURE_1")).toBe(true);
+    expect(await newClient().refundCapture("CAPTURE_1")).toEqual({ ok: true });
 
     const [refundCall] = requestTo("/v2/payments/captures/CAPTURE_1/refund");
     expect(refundCall[1]?.method).toBe("POST");
@@ -216,15 +216,58 @@ describe("Paypal.refundCapture", () => {
     expect(JSON.parse(String(refundCall[1]?.body))).toEqual({});
   });
 
-  it("returns false when PayPal rejects the refund", async () => {
-    fetchMock.mockResponses(TOKEN_RESPONSE, [JSON.stringify({ name: "UNPROCESSABLE_ENTITY" }), { status: 422 }]);
+  it("passes on PayPal's reason when it rejects the refund (real live response: not enough balance)", async () => {
+    const insufficientFunds = {
+      name: "UNPROCESSABLE_ENTITY",
+      message: "The requested action could not be performed, semantically incorrect, or failed business validation.",
+      details: [
+        {
+          issue: "REFUND_FAILED_INSUFFICIENT_FUNDS",
+          description: "Capture could not be refunded due to insufficient funds.",
+        },
+      ],
+    };
+    fetchMock.mockResponses(TOKEN_RESPONSE, [JSON.stringify(insufficientFunds), { status: 422 }]);
 
-    expect(await newClient().refundCapture("CAPTURE_1")).toBe(false);
+    expect(await newClient().refundCapture("CAPTURE_1")).toEqual({
+      ok: false,
+      reason: "REFUND_FAILED_INSUFFICIENT_FUNDS: Capture could not be refunded due to insufficient funds.",
+    });
   });
 
-  it("returns false when the refund is not accepted", async () => {
+  it("fails when the refund is not accepted", async () => {
     fetchMock.mockResponses(TOKEN_RESPONSE, JSON.stringify({ id: "REFUND_1", status: "FAILED" }));
 
-    expect(await newClient().refundCapture("CAPTURE_1")).toBe(false);
+    expect(await newClient().refundCapture("CAPTURE_1")).toEqual({
+      ok: false,
+      reason: "PayPal reported the refund as FAILED",
+    });
+  });
+
+  it("fails (without throwing) when PayPal can't be reached", async () => {
+    fetchMock.mockResponses(TOKEN_RESPONSE);
+    fetchMock.mockRejectOnce(new Error("network down"));
+
+    // first mocked response is the token, the second call (refund) rejects
+    const result = await newClient().refundCapture("CAPTURE_1");
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("describePaypalError", () => {
+  it("uses the first detail's issue and description", () => {
+    expect(
+      describePaypalError(JSON.stringify({ name: "X", details: [{ issue: "ISSUE", description: "Why" }] }), 422)
+    ).toBe("ISSUE: Why");
+  });
+
+  it("falls back to the error name and message", () => {
+    expect(describePaypalError(JSON.stringify({ name: "NOT_AUTHORIZED", message: "No." }), 403)).toBe(
+      "NOT_AUTHORIZED: No."
+    );
+  });
+
+  it("falls back to the HTTP status for a non-JSON body", () => {
+    expect(describePaypalError("<html>oops</html>", 502)).toBe("PayPal returned HTTP 502");
   });
 });

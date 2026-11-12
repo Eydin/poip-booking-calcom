@@ -70,9 +70,9 @@ describe.skipIf(!clientId || !secretKey)("PayPal sandbox smoke test", () => {
       const again = await client.captureOrder(approvedOrderId ?? "");
       expect(again?.captureId).toBe(capture?.captureId);
 
-      expect(await client.refundCapture(capture?.captureId ?? "")).toBe(true);
+      expect(await client.refundCapture(capture?.captureId ?? "")).toEqual({ ok: true });
       // Refunding again is idempotent (same PayPal-Request-Id).
-      expect(await client.refundCapture(capture?.captureId ?? "")).toBe(true);
+      expect(await client.refundCapture(capture?.captureId ?? "")).toEqual({ ok: true });
     },
     30000
   );

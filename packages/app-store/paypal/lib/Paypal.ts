@@ -171,8 +171,12 @@ class Paypal {
     return null;
   }
 
-  /** Fully refunds a capture. Returns true once PayPal has accepted the refund. */
-  async refundCapture(captureId: string): Promise<boolean> {
+  /**
+   * Fully refunds a capture. `ok` once PayPal has accepted the refund; otherwise `reason` is
+   * PayPal's own explanation (e.g. not enough money in the PayPal balance), so it can be passed
+   * on to the organizer.
+   */
+  async refundCapture(captureId: string): Promise<PaypalRefundResult> {
     try {
       const response = await this.fetcher(`/v2/payments/captures/${captureId}/refund`, {
         method: "POST",
@@ -180,14 +184,18 @@ class Paypal {
         body: JSON.stringify({}),
       });
       if (!response.ok) {
-        console.error(`Refund request failed with status ${response.status}`, await response.text());
-        return false;
+        const body = await response.text();
+        console.error(`Refund request failed with status ${response.status}`, body);
+        return { ok: false, reason: describePaypalError(body, response.status) };
       }
       const result = await response.json();
-      return result?.status === "COMPLETED" || result?.status === "PENDING";
+      if (result?.status === "COMPLETED" || result?.status === "PENDING") {
+        return { ok: true };
+      }
+      return { ok: false, reason: `PayPal reported the refund as ${result?.status ?? "unknown"}` };
     } catch (error) {
       console.error(error);
-      return false;
+      return { ok: false, reason: error instanceof Error ? error.message : "PayPal could not be reached" };
     }
   }
 
@@ -315,6 +323,32 @@ export default Paypal;
 
 function getFirstCaptureId(order: OrderWithCaptures): string | null {
   return order.purchase_units?.[0]?.payments?.captures?.[0]?.id ?? null;
+}
+
+export type PaypalRefundResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Turns a PayPal error response into one readable line, e.g.
+ * "REFUND_FAILED_INSUFFICIENT_FUNDS: Capture could not be refunded due to insufficient funds. ..."
+ */
+export function describePaypalError(body: string, status: number): string {
+  try {
+    const parsed = JSON.parse(body) as {
+      name?: string;
+      message?: string;
+      details?: Array<{ issue?: string; description?: string }>;
+    };
+    const detail = parsed.details?.[0];
+    if (detail?.issue || detail?.description) {
+      return [detail.issue, detail.description].filter(Boolean).join(": ");
+    }
+    if (parsed.message || parsed.name) {
+      return [parsed.name, parsed.message].filter(Boolean).join(": ");
+    }
+  } catch {
+    // not JSON - fall through
+  }
+  return `PayPal returned HTTP ${status}`;
 }
 
 export interface OrderWithCaptures {

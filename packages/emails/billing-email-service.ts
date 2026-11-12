@@ -1,4 +1,5 @@
 import type BaseEmail from "@calcom/emails/templates/_base-email";
+import { getExtraOrganizerEmailRecipients } from "@calcom/lib/getExtraOrganizerEmailRecipients";
 import type { EventTypeMetadata } from "@calcom/prisma/zod-utils";
 import type { CalendarEvent, Person } from "@calcom/types/Calendar";
 
@@ -20,7 +21,10 @@ const eventTypeDisableAttendeeEmail = (metadata?: EventTypeMetadata) => {
   return !!metadata?.disableStandardEmails?.all?.attendee;
 };
 
-export const sendOrganizerPaymentRefundFailedEmail = async (calEvent: CalendarEvent) => {
+export const sendOrganizerPaymentRefundFailedEmail = async (
+  calEvent: CalendarEvent,
+  eventTypeMetadata?: EventTypeMetadata
+) => {
   const emailsToSend: Promise<unknown>[] = [];
   emailsToSend.push(sendEmail(() => new OrganizerPaymentRefundFailedEmail({ calEvent })));
 
@@ -28,6 +32,12 @@ export const sendOrganizerPaymentRefundFailedEmail = async (calEvent: CalendarEv
     for (const teamMember of calEvent.team.members) {
       emailsToSend.push(sendEmail(() => new OrganizerPaymentRefundFailedEmail({ calEvent, teamMember })));
     }
+  }
+
+  // Same extra organizer recipients (BOOKING_ORGANIZER_CC_EMAILS / "Notify additional emails")
+  // as the other organizer notifications, so a co-host also hears about it.
+  for (const teamMember of getExtraOrganizerEmailRecipients(calEvent, eventTypeMetadata)) {
+    emailsToSend.push(sendEmail(() => new OrganizerPaymentRefundFailedEmail({ calEvent, teamMember })));
   }
 
   await Promise.all(emailsToSend);

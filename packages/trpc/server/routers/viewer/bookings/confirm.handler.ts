@@ -8,6 +8,10 @@ import { getAssignmentReasonCategory } from "@calcom/features/bookings/lib/getAs
 import { getCalEventResponses } from "@calcom/features/bookings/lib/getCalEventResponses";
 import { handleConfirmation } from "@calcom/features/bookings/lib/handleConfirmation";
 import { handleWebhookTrigger } from "@calcom/features/bookings/lib/handleWebhookTrigger";
+import {
+  describeRefundedPayments,
+  handleRefundError,
+} from "@calcom/features/bookings/lib/payment/handleRefundError";
 import { processPaymentRefund } from "@calcom/features/bookings/lib/payment/processPaymentRefund";
 import { BookingAccessService } from "@calcom/features/bookings/services/BookingAccessService";
 import {
@@ -412,10 +416,22 @@ export const confirmHandler = async ({ ctx, input }: ConfirmOptions) => {
     } else {
       // handle refunds
       if (booking.payment.length) {
-        await processPaymentRefund({
-          booking: booking,
-          teamId: booking.eventType?.teamId,
-        });
+        try {
+          await processPaymentRefund({
+            booking: booking,
+            teamId: booking.eventType?.teamId,
+          });
+        } catch (error) {
+          // Same as cancelling: still reject the booking, and email the organizer so the booker
+          // can be refunded by hand instead of the rejection silently failing.
+          log.error(`Error processing payment refund for booking ${booking.uid}:`, safeStringify(error));
+          await handleRefundError({
+            event: evt,
+            reason: error instanceof Error ? error.message : String(error),
+            paymentId: describeRefundedPayments(booking.payment),
+            eventTypeMetadata: booking.eventType?.metadata as EventTypeMetadata,
+          });
+        }
       }
       // end handle refunds.
 

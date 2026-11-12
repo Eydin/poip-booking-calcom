@@ -5,7 +5,7 @@ import classNames from "classnames";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { Toaster } from "sonner";
 import { z } from "zod";
@@ -254,8 +254,19 @@ export default function Success(props: PageProps) {
       }
     }
 
-    router.replace(`${pathname}?${_searchParams.toString()}`);
+    // scroll: false - by default the URL change jumps to the top of the page, which hides the
+    // cancel form that just opened further down (it looked like nothing had happened).
+    router.replace(`${pathname}?${_searchParams.toString()}`, { scroll: false });
   }
+
+  // Bring the cancel form (reason + confirm button) into view when it opens, including when the
+  // booker arrives from the "Cancel" link in their email.
+  const cancelSectionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isCancellationMode) {
+      cancelSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isCancellationMode]);
 
   let evtName = eventType.eventName;
   if (eventType.isDynamic && bookingInfo.responses?.title) {
@@ -976,7 +987,7 @@ export default function Success(props: PageProps) {
                           )}
                         </>
                       ) : (
-                        <>
+                        <div ref={cancelSectionRef} className="scroll-mb-8" data-testid="cancel-booking-section">
                           <hr className="border-subtle" />
                           <CancelBooking
                             booking={{
@@ -1002,7 +1013,7 @@ export default function Success(props: PageProps) {
                             internalNotePresets={props.internalNotePresets}
                             renderContext="booking-single-view"
                           />
-                        </>
+                        </div>
                       ))}
                     {isRerouting && typeof window !== "undefined" && window.opener && (
                       <div className="flex justify-center">
@@ -1027,26 +1038,41 @@ export default function Success(props: PageProps) {
                             {googleCalendarLink && (
                               <Link
                                 href={googleCalendarLink}
-                                className="text-default border-subtle h-10 w-10 rounded-sm border px-3 py-2 ltr:mr-2 rtl:ml-2"
+                                className="text-default border-subtle h-10 w-10 rounded-sm border px-3 py-2 hover:bg-muted ltr:mr-2 rtl:ml-2"
                                 target="_blank">
                                 <svg
                                   className="-mt-1.5 inline-block h-4 w-4"
-                                  fill="currentColor"
                                   xmlns="http://www.w3.org/2000/svg"
                                   viewBox="0 0 24 24">
                                   <title>Google</title>
-                                  <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
+                                  {/* Google's four-colour "G" (the calendar buttons used to be plain grey) */}
+                                  <path
+                                    fill="#4285F4"
+                                    d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+                                  />
+                                  <path
+                                    fill="#34A853"
+                                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"
+                                  />
+                                  <path
+                                    fill="#FBBC05"
+                                    d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"
+                                  />
+                                  <path
+                                    fill="#EA4335"
+                                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+                                  />
                                 </svg>
                               </Link>
                             )}
                             {microsoftOutlookLink && (
                               <Link
                                 href={microsoftOutlookLink}
-                                className="border-subtle text-default mx-2 h-10 w-10 rounded-sm border px-3 py-2"
+                                className="border-subtle text-default mx-2 h-10 w-10 rounded-sm border px-3 py-2 hover:bg-muted"
                                 target="_blank">
                                 <svg
                                   className="-mt-1.5 mr-1 inline-block h-4 w-4"
-                                  fill="currentColor"
+                                  fill="#0078D4"
                                   xmlns="http://www.w3.org/2000/svg"
                                   viewBox="0 0 24 24">
                                   <title>Microsoft Outlook</title>
@@ -1057,11 +1083,11 @@ export default function Success(props: PageProps) {
                             {microsoftOfficeLink && (
                               <Link
                                 href={microsoftOfficeLink}
-                                className="text-default border-subtle mx-2 h-10 w-10 rounded-sm border px-3 py-2"
+                                className="text-default border-subtle mx-2 h-10 w-10 rounded-sm border px-3 py-2 hover:bg-muted"
                                 target="_blank">
                                 <svg
                                   className="-mt-1.5 mr-1 inline-block h-4 w-4"
-                                  fill="currentColor"
+                                  fill="#D83B01"
                                   xmlns="http://www.w3.org/2000/svg"
                                   viewBox="0 0 24 24">
                                   <title>Microsoft Office</title>
@@ -1072,11 +1098,11 @@ export default function Success(props: PageProps) {
                             {icsLink && (
                               <Link
                                 href={icsLink}
-                                className="border-subtle text-default mx-2 h-10 w-10 rounded-sm border px-3 py-2"
+                                className="border-subtle text-default mx-2 h-10 w-10 rounded-sm border px-3 py-2 hover:bg-muted"
                                 download={`${eventType.title}.ics`}>
                                 <svg
                                   version="1.1"
-                                  fill="currentColor"
+                                  fill="#7C3AED"
                                   xmlns="http://www.w3.org/2000/svg"
                                   viewBox="0 0 1000 1000"
                                   className="-mt-1.5 mr-1 inline-block h-4 w-4">

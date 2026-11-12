@@ -289,6 +289,161 @@ describe("Cancel Booking", () => {
     expect(processPaymentRefund).toHaveBeenCalled();
   });
 
+  test("When the automatic refund fails, still cancels and emails the organizer and co-host the reason", async ({
+    emails,
+  }) => {
+    const handleCancelBooking = (await import("@calcom/features/bookings/lib/handleCancelBooking")).default;
+    const { prisma } = await import("@calcom/prisma");
+
+    const booker = getBooker({ email: "booker@example.com", name: "Booker" });
+    const organizer = getOrganizer({
+      name: "Organizer",
+      email: "organizer@example.com",
+      id: 101,
+      schedules: [TestData.schedules.IstWorkHours],
+      credentials: [getGoogleCalendarCredential()],
+      selectedCalendars: [TestData.selectedCalendars.google],
+    });
+
+    const uid = "refundFailsBookingUid01";
+    const bookingId = 1030;
+    const { dateString: plus1DateString } = getDate({ dateIncrement: 1 });
+
+    await createBookingScenario(
+      getScenarioData({
+        eventTypes: [
+          {
+            id: 1,
+            slotInterval: 30,
+            length: 30,
+            users: [{ id: 101 }],
+            metadata: { organizerCcEmails: ["cohost@example.com"] },
+          },
+        ],
+        payment: [
+          {
+            amount: 2000,
+            bookingId,
+            currency: "czk",
+            data: {},
+            externalId: "PAYPAL_ORDER_1",
+            fee: 0,
+            refunded: false,
+            success: true,
+            uid: "payment-uid-refund-fails",
+          },
+        ],
+        bookings: [
+          {
+            id: bookingId,
+            uid,
+            eventTypeId: 1,
+            userId: 101,
+            responses: {
+              email: booker.email,
+              name: booker.name,
+              location: { optionValue: "", value: BookingLocations.CalVideo },
+            },
+            status: BookingStatus.ACCEPTED,
+            startTime: `${plus1DateString}T05:00:00.000Z`,
+            endTime: `${plus1DateString}T05:15:00.000Z`,
+            attendees: [{ timeZone: "Asia/Kolkata", email: booker.email }],
+          },
+        ],
+        organizer,
+        apps: [TestData.apps["daily-video"]],
+      })
+    );
+    mockCalendarToHaveNoBusySlots("googlecalendar", { create: { id: "MOCKED_GOOGLE_CALENDAR_EVENT_ID" } });
+
+    vi.mocked(processPaymentRefund).mockRejectedValueOnce(
+      new Error(
+        "Failed to refund 1 of 1 payment(s): PayPal refund failed for transaction CAPTURE_1: REFUND_FAILED_INSUFFICIENT_FUNDS: Capture could not be refunded due to insufficient funds."
+      )
+    );
+
+    await handleCancelBooking({
+      bookingData: { id: bookingId, uid, cancelledBy: booker.email, cancellationReason: "Can't make it" },
+    });
+
+    const cancelled = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(cancelled?.status).toBe(BookingStatus.CANCELLED);
+
+    // Translations render as their keys in tests ("refund_failed_subject" = "Refund failed: ...").
+    const refundFailedEmails = emails.get().filter((email) => email.subject === "refund_failed_subject");
+    expect(refundFailedEmails.map((email) => email.to).sort()).toEqual([
+      "cohost@example.com",
+      "organizer@example.com",
+    ]);
+    for (const email of refundFailedEmails) {
+      // The provider's payment id, so the organizer can find it in PayPal/Stripe.
+      expect(email.html).toContain("PAYPAL_ORDER_1");
+    }
+  });
+
+  test("Sends no refund-failed email when the refund succeeds", async ({ emails }) => {
+    const handleCancelBooking = (await import("@calcom/features/bookings/lib/handleCancelBooking")).default;
+
+    const booker = getBooker({ email: "booker@example.com", name: "Booker" });
+    const organizer = getOrganizer({
+      name: "Organizer",
+      email: "organizer@example.com",
+      id: 101,
+      schedules: [TestData.schedules.IstWorkHours],
+      credentials: [getGoogleCalendarCredential()],
+      selectedCalendars: [TestData.selectedCalendars.google],
+    });
+    const uid = "refundOkBookingUid00001";
+    const bookingId = 1031;
+    const { dateString: plus1DateString } = getDate({ dateIncrement: 1 });
+
+    await createBookingScenario(
+      getScenarioData({
+        eventTypes: [{ id: 1, slotInterval: 30, length: 30, users: [{ id: 101 }] }],
+        payment: [
+          {
+            amount: 2000,
+            bookingId,
+            currency: "czk",
+            data: {},
+            externalId: "PAYPAL_ORDER_2",
+            fee: 0,
+            refunded: false,
+            success: true,
+            uid: "payment-uid-refund-ok",
+          },
+        ],
+        bookings: [
+          {
+            id: bookingId,
+            uid,
+            eventTypeId: 1,
+            userId: 101,
+            responses: {
+              email: booker.email,
+              name: booker.name,
+              location: { optionValue: "", value: BookingLocations.CalVideo },
+            },
+            status: BookingStatus.ACCEPTED,
+            startTime: `${plus1DateString}T05:00:00.000Z`,
+            endTime: `${plus1DateString}T05:15:00.000Z`,
+            attendees: [{ timeZone: "Asia/Kolkata", email: booker.email }],
+          },
+        ],
+        organizer,
+        apps: [TestData.apps["daily-video"]],
+      })
+    );
+    mockCalendarToHaveNoBusySlots("googlecalendar", { create: { id: "MOCKED_GOOGLE_CALENDAR_EVENT_ID" } });
+    vi.mocked(processPaymentRefund).mockResolvedValueOnce(undefined);
+
+    await handleCancelBooking({
+      bookingData: { id: bookingId, uid, cancelledBy: booker.email, cancellationReason: "Can't make it" },
+    });
+
+    expect(emails.get().filter((email) => email.subject === "refund_failed_subject")).toHaveLength(0);
+  });
+
   test("Should pass all seat payments to processPaymentRefund when fully cancelling a paid seated booking", async () => {
     const handleCancelBooking = (await import("@calcom/features/bookings/lib/handleCancelBooking")).default;
 

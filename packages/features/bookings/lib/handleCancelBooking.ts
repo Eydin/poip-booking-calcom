@@ -7,6 +7,10 @@ import { BookingReferenceRepository } from "@calcom/features/bookingReference/re
 import EventManager from "@calcom/features/bookings/lib/EventManager";
 import { getCalEventResponses } from "@calcom/features/bookings/lib/getCalEventResponses";
 import { processNoShowFeeOnCancellation } from "@calcom/features/bookings/lib/payment/processNoShowFeeOnCancellation";
+import {
+  describeRefundedPayments,
+  handleRefundError,
+} from "@calcom/features/bookings/lib/payment/handleRefundError";
 import { processPaymentRefund } from "@calcom/features/bookings/lib/payment/processPaymentRefund";
 import {
   type EventTypeBrandingData,
@@ -413,6 +417,13 @@ async function handler(input: CancelBookingInput, dependencies?: Dependencies) {
         });
       } catch (error) {
         log.error(`Error processing payment refund for booking ${bookingToDelete.uid}:`, error);
+        // The booking is cancelled either way; tell the organizer so the booker gets refunded by hand.
+        await handleRefundError({
+          event: evt,
+          reason: error instanceof Error ? error.message : String(error),
+          paymentId: describeRefundedPayments(bookingToDelete.payment),
+          eventTypeMetadata: bookingToDelete.eventType?.metadata as EventTypeMetadata,
+        });
       }
     } else if (bookingToDelete.payment.some((payment) => payment.paymentOption === "HOLD")) {
       try {
