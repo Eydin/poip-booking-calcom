@@ -1,19 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/cron/calendar-subscriptions",
-      "schedule": "*/15 * * * *"
-    },
-    {
       "path": "/api/cron/calendar-subscriptions-cleanup",
       "schedule": "0 3 * * *"
     },
     {
       "path": "/api/tasks/cron",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/selected-calendars",
       "schedule": "*/15 * * * *"
     }
   ]
